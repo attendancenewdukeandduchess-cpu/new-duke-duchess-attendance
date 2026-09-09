@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  employeeId     String    @unique
+  name           String
+  mobile         String?   @unique
+  email          String?   @unique
+  password       String
+  role           String    @default("EMPLOYEE") // EMPLOYEE or ADMIN
+  designation    String?
+  department     String?
+  joiningDate    DateTime  @default(now())
+  baseSalary     Float     @default(0)
+  status         String    @default("ACTIVE") // ACTIVE, DISABLED
+  profilePhoto   String?
+
+  attendances    Attendance[]
+  attempts       AttendanceAttempt[]
+  leaves         Leave[]
+  payrolls       Payroll[]
+}
+
+model Attendance {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  date              DateTime @default(now()) 
+  
+  checkInTime       DateTime?
+  checkInSelfie     String?
+  checkInLatitude   Float?
+  checkInLongitude  Float?
+  
+  checkOutTime      DateTime?
+  checkOutSelfie    String?
+  checkOutLatitude  Float?
+  checkOutLongitude Float?
+  
+  gpsAccuracy       Float?
+  distanceFromSalon Float?
+  status            String   @default("PRESENT") // PRESENT, LATE, ABSENT
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model AttendanceAttempt {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  timestamp         DateTime @default(now())
+  latitude          Float
+  longitude         Float
+  accuracy          Float
+  distance          Float
+  selfie            String?
+  rejectionReason   String
+}
+
+model Leave {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  leaveType   String
+  fromDate    DateTime
+  toDate      DateTime
+  reason      String
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedBy  String?
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Payroll {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  month       String   // e.g., "September 2026"
+  basicSalary Float
+  allowances  Float    @default(0)
+  incentives  Float    @default(0)
+  overtime    Float    @default(0)
+  deductions  Float    @default(0)
+  advances    Float    @default(0)
+  netSalary   Float
+  status      String   @default("DRAFT") // DRAFT, APPROVED, PAID
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalonSettings {
+  id                 String   @id @default(cuid())
+  salonName          String   @default("New Duke & Duchess")
+  latitude           Float    @default(0.0)
+  longitude          Float    @default(0.0)
+  allowedRadius      Float    @default(100.0) // in meters
+  workStartTime      String   @default("09:30")
+  workEndTime        String   @default("19:30")
+  gracePeriodMinutes Int      @default(15)
+  checkInEnabled     Boolean  @default(true)
+  checkOutEnabled    Boolean  @default(true)
+  gpsRequired        Boolean  @default(true)
+  selfieRequired     Boolean  @default(true)
+}
