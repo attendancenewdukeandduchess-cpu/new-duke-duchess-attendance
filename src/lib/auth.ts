@@ -13,13 +13,25 @@ export const authOptions: NextAuthOptions = {
         password:   { label: "Password",    type: "password" }
       },
       async authorize(credentials) {
+        console.log('--- LOGIN ATTEMPT ---');
+        console.log('Credentials:', credentials?.employeeId);
         if (!credentials?.employeeId || !credentials?.password) return null;
 
         await connectDB();
-        const user = await User.findOne({ employeeId: credentials.employeeId, status: 'ACTIVE' }).lean() as any;
+        const id = credentials.employeeId.trim();
+        const user = await User.findOne({
+          $or: [
+            { employeeId: { $regex: new RegExp(`^${id}$`, 'i') } },
+            { mobile: id }
+          ],
+          status: 'ACTIVE'
+        }).lean() as any;
+
+        console.log('Database lookup result:', user ? `Found ${user.employeeId} (${user.name})` : 'NOT FOUND');
         if (!user) return null;
 
         const isValid = (credentials.password === user.password) || await bcrypt.compare(credentials.password, user.password).catch(() => false);
+        console.log('Password verification:', isValid ? 'SUCCESS' : 'FAILED');
         if (!isValid) return null;
 
         return {
