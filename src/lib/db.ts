@@ -1,4 +1,12 @@
 import mongoose from 'mongoose';
+import dns from 'node:dns';
+
+// Fix for Windows DNS ECONNREFUSED on querySrv for MongoDB Atlas
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (e) {
+  // Ignore in environments where setServers is restricted
+}
 
 // Cached connection for Next.js serverless environment
 let cached = (global as any).mongoose;
