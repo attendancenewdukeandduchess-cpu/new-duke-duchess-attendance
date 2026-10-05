@@ -18,7 +18,7 @@ const SalonSettingsSchema = new Schema<ISalonSettings>({
   salonName:          { type: String, default: 'New Duke & Duchess' },
   latitude:           { type: Number, default: 0.0 },
   longitude:          { type: Number, default: 0.0 },
-  allowedRadius:      { type: Number, default: 100.0 },
+  allowedRadius:      { type: Number, default: 20.0 },
   workStartTime:      { type: String, default: '09:30' },
   workEndTime:        { type: String, default: '19:30' },
   gracePeriodMinutes: { type: Number, default: 15 },

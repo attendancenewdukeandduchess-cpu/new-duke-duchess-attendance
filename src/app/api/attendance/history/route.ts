@@ -10,29 +10,61 @@ export async function GET(req: Request) {
 
   const userId = (session.user as any).id;
   const { searchParams } = new URL(req.url);
-  const filter = searchParams.get('filter') || 'month'; // today | week | month
+  const filter = searchParams.get('filter') || 'month'; // today | week | month | all
 
   await connectDB();
 
   const now = new Date();
-  let startDate: Date;
+  const query: any = { userId };
 
   if (filter === 'today') {
-    startDate = new Date(now.toISOString().split('T')[0]);
+    const todayStr = now.toISOString().split('T')[0];
+    query.date = todayStr;
   } else if (filter === 'week') {
-    startDate = new Date(now);
-    startDate.setDate(now.getDate() - 7);
-  } else {
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    const weekAgo = new Date(now);
+    weekAgo.setDate(now.getDate() - 7);
+    query.date = { $gte: weekAgo.toISOString().split('T')[0], $lte: now.toISOString().split('T')[0] };
+  } else if (filter === 'month') {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    query.date = { $gte: monthStart, $lte: now.toISOString().split('T')[0] };
+  }
+  // If 'all', no date filter is applied
+
+  const records = await Attendance.find(query).sort({ date: -1 }).lean() as any[];
+
+  // Calculate summary stats
+  let totalMinutes = 0;
+  let presentDays = 0;
+  let lateDays = 0;
+
+  for (const rec of records) {
+    if (rec.status === 'LATE') {
+      lateDays++;
+      presentDays++;
+    } else if (rec.status === 'PRESENT') {
+      presentDays++;
+    }
+
+    if (rec.checkInTime && rec.checkOutTime) {
+      const diff = new Date(rec.checkOutTime).getTime() - new Date(rec.checkInTime).getTime();
+      if (diff > 0) {
+        totalMinutes += Math.floor(diff / (1000 * 60));
+      }
+    }
   }
 
-  const startStr = startDate.toISOString().split('T')[0];
-  const endStr   = now.toISOString().split('T')[0];
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  const totalHoursStr = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 
-  const records = await Attendance.find({
-    userId,
-    date: { $gte: startStr, $lte: endStr }
-  }).sort({ date: -1 }).lean();
-
-  return NextResponse.json({ records });
+  return NextResponse.json({
+    records,
+    stats: {
+      totalRecords: records.length,
+      presentDays,
+      lateDays,
+      totalHoursStr,
+      totalMinutes
+    }
+  });
 }

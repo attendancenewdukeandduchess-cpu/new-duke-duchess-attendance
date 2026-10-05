@@ -19,7 +19,7 @@ const SalonSettingsSchema = new mongoose.Schema({
   salonName:          { type: String, default: 'New Duke & Duchess' },
   latitude:           { type: Number, default: 0.0 },
   longitude:          { type: Number, default: 0.0 },
-  allowedRadius:      { type: Number, default: 100.0 },
+  allowedRadius:      { type: Number, default: 20.0 },
   workStartTime:      { type: String, default: '09:30' },
   workEndTime:        { type: String, default: '19:30' },
   gracePeriodMinutes: { type: Number, default: 15 },
@@ -60,9 +60,9 @@ async function seed() {
   if (!existing) {
     await SalonSettingsModel.create({
       salonName: 'New Duke & Duchess',
-      latitude: 13.0827,   // replace with actual salon lat/lng
-      longitude: 80.2707,  // replace with actual salon lat/lng
-      allowedRadius: 100,
+      latitude: 16.974646964942863,
+      longitude: 81.78710560691698,
+      allowedRadius: 20,
       workStartTime: '09:30',
       workEndTime: '19:30',
       gracePeriodMinutes: 15,
