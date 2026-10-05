@@ -22,15 +22,20 @@ import {
   Plus,
   Sparkles,
   Check,
-  Calendar
+  Calendar,
+  Users,
+  Search,
+  ShieldCheck
 } from 'lucide-react';
 
 export default function EmployeeDashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
+  const isAdmin = (session?.user as any)?.role === 'ADMIN';
+
   // Active navigation tab
-  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile' | 'employees'>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Home states
@@ -50,6 +55,22 @@ export default function EmployeeDashboard() {
   const [contactMobile, setContactMobile] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [savingContact, setSavingContact] = useState(false);
+
+  // Admin Employees states
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [employeesLoading, setEmployeesLoading] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [addEmpModalOpen, setAddEmpModalOpen] = useState(false);
+  const [newEmpId, setNewEmpId] = useState('');
+  const [newEmpName, setNewEmpName] = useState('');
+  const [newEmpMobile, setNewEmpMobile] = useState('');
+  const [newEmpEmail, setNewEmpEmail] = useState('');
+  const [newEmpDesig, setNewEmpDesig] = useState('Senior Stylist');
+  const [newEmpDept, setNewEmpDept] = useState('Styling');
+  const [newEmpSalary, setNewEmpSalary] = useState('25000');
+  const [newEmpPassword, setNewEmpPassword] = useState('emp123');
+  const [addEmpSubmitting, setAddEmpSubmitting] = useState(false);
+  const [addEmpMsg, setAddEmpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Leave Modal states
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -76,6 +97,9 @@ export default function EmployeeDashboard() {
       fetchAttendance();
       fetchProfile();
       fetchHistory('month');
+      if ((session?.user as any)?.role === 'ADMIN') {
+        fetchEmployees();
+      }
     }
   }, [status]);
 
@@ -122,6 +146,20 @@ export default function EmployeeDashboard() {
       console.error('Failed to fetch profile', e);
     } finally {
       setProfileLoading(false);
+    }
+  };
+
+  // Fetch all employees (for Admin)
+  const fetchEmployees = async () => {
+    setEmployeesLoading(true);
+    try {
+      const res = await fetch('/api/admin/employees');
+      const data = await res.json();
+      setEmployees(data.employees || []);
+    } catch (e) {
+      console.error('Failed to fetch employees', e);
+    } finally {
+      setEmployeesLoading(false);
     }
   };
 
@@ -188,6 +226,48 @@ export default function EmployeeDashboard() {
     }
   };
 
+  // Add new employee (Admin)
+  const handleAddEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddEmpSubmitting(true);
+    setAddEmpMsg(null);
+    try {
+      const res = await fetch('/api/admin/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: newEmpId,
+          name: newEmpName,
+          mobile: newEmpMobile,
+          email: newEmpEmail,
+          designation: newEmpDesig,
+          department: newEmpDept,
+          baseSalary: Number(newEmpSalary),
+          password: newEmpPassword
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setAddEmpMsg({ type: 'success', text: `Employee ${newEmpName} (${newEmpId.toUpperCase()}) added successfully!` });
+        setNewEmpId('');
+        setNewEmpName('');
+        setNewEmpMobile('');
+        setNewEmpEmail('');
+        setTimeout(() => {
+          setAddEmpModalOpen(false);
+          setAddEmpMsg(null);
+        }, 1500);
+        fetchEmployees();
+      } else {
+        setAddEmpMsg({ type: 'error', text: data.error || 'Failed to add employee.' });
+      }
+    } catch (err) {
+      setAddEmpMsg({ type: 'error', text: 'Network error adding employee.' });
+    } finally {
+      setAddEmpSubmitting(false);
+    }
+  };
+
   // Camera & GPS workflows
   const startAttendance = async () => {
     setStep('CAMERA');
@@ -249,6 +329,7 @@ export default function EmployeeDashboard() {
             fetchAttendance();
             fetchHistory();
             fetchProfile();
+            if (isAdmin) fetchEmployees();
           } else {
             setErrorMsg(data.error || 'Attendance rejected.');
             if (data.distance) setErrorDistance(data.distance);
@@ -315,8 +396,19 @@ export default function EmployeeDashboard() {
   const isCheckedIn = !!attendance?.checkInTime;
   const isCheckedOut = !!attendance?.checkOutTime;
   const employeeName = session?.user?.name || profileData?.user?.name || 'Staff Member';
-  const employeeRole = (session?.user as any)?.designation || profileData?.user?.designation || 'Stylist';
+  const employeeRole = (session?.user as any)?.designation || profileData?.user?.designation || (isAdmin ? 'Salon Manager' : 'Stylist');
   const employeeId = (session?.user as any)?.employeeId || profileData?.user?.employeeId || 'Staff';
+
+  // Filtered employees for admin view
+  const filteredEmployees = employees.filter((emp) => {
+    const q = employeeSearch.toLowerCase();
+    return (
+      emp.name?.toLowerCase().includes(q) ||
+      emp.employeeId?.toLowerCase().includes(q) ||
+      emp.designation?.toLowerCase().includes(q) ||
+      emp.mobile?.includes(q)
+    );
+  });
 
   return (
     <div className="dashboard-layout">
@@ -328,7 +420,9 @@ export default function EmployeeDashboard() {
           </div>
           <div>
             <h2 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>New Duke & Duchess</h2>
-            <p className="text-muted" style={{ fontSize: '0.7rem', margin: 0 }}>Staff Attendance</p>
+            <p className="text-muted" style={{ fontSize: '0.7rem', margin: 0 }}>
+              {isAdmin ? 'Admin Console' : 'Staff Attendance'}
+            </p>
           </div>
         </div>
         <button
@@ -355,7 +449,9 @@ export default function EmployeeDashboard() {
             </div>
             <div>
               <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.2 }}>New Duke & Duchess</h2>
-              <p className="text-gold" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Staff Portal</p>
+              <p className="text-gold" style={{ fontSize: '0.75rem', fontWeight: 600 }}>
+                {isAdmin ? 'Admin Portal' : 'Staff Portal'}
+              </p>
             </div>
           </div>
 
@@ -384,6 +480,17 @@ export default function EmployeeDashboard() {
               <User size={20} />
               <span>Profile</span>
             </button>
+
+            {/* Admin Only Tab: Employees / Staff Management */}
+            {isAdmin && (
+              <button
+                className={`nav-item ${activeTab === 'employees' ? 'active' : ''}`}
+                onClick={() => { setActiveTab('employees'); setMobileMenuOpen(false); fetchEmployees(); }}
+              >
+                <Users size={20} />
+                <span>Staff ({employees.length})</span>
+              </button>
+            )}
           </nav>
         </div>
 
@@ -799,6 +906,7 @@ export default function EmployeeDashboard() {
                 <div className="flex items-center gap-2" style={{ flexWrap: 'wrap' }}>
                   <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>{employeeName}</h2>
                   <span className="badge badge-present">{profileData?.user?.status || 'ACTIVE'}</span>
+                  {isAdmin && <span className="badge" style={{ backgroundColor: 'rgba(197, 160, 89, 0.15)', color: 'var(--accent-gold)' }}>ADMIN</span>}
                 </div>
                 <p className="text-muted text-sm" style={{ marginTop: '0.2rem' }}>
                   {profileData?.user?.designation || employeeRole} • {profileData?.user?.department || 'Styling'}
@@ -1037,6 +1145,279 @@ export default function EmployeeDashboard() {
                       </button>
                       <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={leaveSubmitting}>
                         {leaveSubmitting ? 'Submitting...' : 'Submit Request'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════ TAB 4: ADMIN EMPLOYEES MANAGEMENT ══════════ */}
+        {activeTab === 'employees' && isAdmin && (
+          <div>
+            <header className="flex justify-between items-center" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+              <div>
+                <h1 style={{ fontSize: '1.35rem', fontWeight: 700 }}>Staff & Employee Management</h1>
+                <p className="text-muted text-sm">Add, view, and monitor daily attendance for all salon team members</p>
+              </div>
+              <button
+                onClick={() => setAddEmpModalOpen(true)}
+                className="btn-primary flex items-center gap-2"
+                style={{ width: 'auto', padding: '0.65rem 1.25rem', fontSize: '0.9rem' }}
+              >
+                <Plus size={18} />
+                <span>Add Employee</span>
+              </button>
+            </header>
+
+            {/* Quick Staff Stats */}
+            <div className="stat-grid">
+              <div className="stat-box">
+                <span className="stat-box-title">Total Staff Members</span>
+                <span className="stat-box-val">{employees.length}</span>
+              </div>
+              <div className="stat-box">
+                <span className="stat-box-title">Present Today</span>
+                <span className="stat-box-val" style={{ color: 'var(--status-present)' }}>
+                  {employees.filter(e => !!e.todayAttendance?.checkInTime).length}
+                </span>
+              </div>
+              <div className="stat-box">
+                <span className="stat-box-title">Not Marked Today</span>
+                <span className="stat-box-val" style={{ color: 'var(--status-absent)' }}>
+                  {employees.filter(e => !e.todayAttendance?.checkInTime).length}
+                </span>
+              </div>
+            </div>
+
+            {/* Search Box */}
+            <div className="card" style={{ padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <Search size={18} className="text-muted" />
+              <input
+                type="text"
+                placeholder="Search staff by name, ID (e.g. E001), phone, or role..."
+                value={employeeSearch}
+                onChange={(e) => setEmployeeSearch(e.target.value)}
+                style={{ border: 'none', outline: 'none', width: '100%', fontSize: '0.95rem' }}
+              />
+              {employeeSearch && (
+                <button onClick={() => setEmployeeSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {/* Employees List */}
+            {employeesLoading ? (
+              <div className="card text-center" style={{ padding: '3rem' }}>
+                <Clock className="animate-spin text-gold" size={28} style={{ margin: '0 auto 0.5rem' }} />
+                <p className="text-muted">Loading staff list...</p>
+              </div>
+            ) : filteredEmployees.length === 0 ? (
+              <div className="card text-center" style={{ padding: '3rem 1.5rem' }}>
+                <Users size={48} className="text-muted" style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>No employees found</h3>
+                <p className="text-muted text-sm">
+                  {employeeSearch ? 'Try a different search query.' : 'Click "+ Add Employee" above to add your staff.'}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {filteredEmployees.map((emp) => {
+                  const todayAtt = emp.todayAttendance;
+                  const isCheckedIn = !!todayAtt?.checkInTime;
+                  const isCheckedOut = !!todayAtt?.checkOutTime;
+
+                  return (
+                    <div key={emp._id} className="card" style={{ padding: '1.25rem' }}>
+                      <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        <div className="flex items-center gap-3">
+                          <div style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'rgba(197, 160, 89, 0.2)', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.05rem', flexShrink: 0 }}>
+                            {emp.name?.[0] || 'E'}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{emp.name}</h3>
+                              <span className="badge" style={{ backgroundColor: '#f3f4f6', color: 'var(--text-main)', fontSize: '0.75rem' }}>
+                                {emp.employeeId}
+                              </span>
+                            </div>
+                            <p className="text-muted text-sm">{emp.designation || 'Staff'} • {emp.department || 'Salon'}</p>
+                          </div>
+                        </div>
+
+                        {/* Today's Status Badge */}
+                        <div>
+                          {!isCheckedIn && (
+                            <span className="badge badge-absent">NOT MARKED TODAY</span>
+                          )}
+                          {isCheckedIn && !isCheckedOut && (
+                            <span className="badge badge-present">PRESENT (CHECKED IN)</span>
+                          )}
+                          {isCheckedOut && (
+                            <span className="badge badge-present">CHECKED OUT</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Details row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem', fontSize: '0.85rem' }}>
+                        <div>
+                          <span className="text-muted">Mobile: </span>
+                          <strong>{emp.mobile || '—'}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted">Today's Check-in: </span>
+                          <strong>{formatTime(todayAtt?.checkInTime)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted">Today's Check-out: </span>
+                          <strong>{formatTime(todayAtt?.checkOutTime)}</strong>
+                        </div>
+                        <div>
+                          <span className="text-muted">Base Salary: </span>
+                          <strong className="text-gold">{emp.baseSalary ? `₹${emp.baseSalary.toLocaleString()}/mo` : '—'}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Modal: Add New Employee */}
+            {addEmpModalOpen && (
+              <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '1rem' }}>
+                <div className="card" style={{ width: '100%', maxWidth: '480px', margin: 0, maxHeight: '90vh', overflowY: 'auto' }}>
+                  <div className="flex justify-between items-center" style={{ marginBottom: '1.25rem' }}>
+                    <div>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Add New Employee</h3>
+                      <p className="text-muted text-sm">Create a staff profile with credentials for login</p>
+                    </div>
+                    <button onClick={() => setAddEmpModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {addEmpMsg && (
+                    <div style={{
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      marginBottom: '1rem',
+                      fontSize: '0.85rem',
+                      backgroundColor: addEmpMsg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: addEmpMsg.type === 'success' ? 'var(--status-present)' : 'var(--status-absent)'
+                    }}>
+                      {addEmpMsg.text}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleAddEmployee}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div className="input-group">
+                        <label className="input-label">Employee ID *</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={newEmpId}
+                          onChange={(e) => setNewEmpId(e.target.value)}
+                          placeholder="e.g. E002, E003"
+                          required
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Full Name *</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={newEmpName}
+                          onChange={(e) => setNewEmpName(e.target.value)}
+                          placeholder="e.g. Rahul Verma"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div className="input-group">
+                        <label className="input-label">Designation</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={newEmpDesig}
+                          onChange={(e) => setNewEmpDesig(e.target.value)}
+                          placeholder="e.g. Hair Stylist"
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Department</label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={newEmpDept}
+                          onChange={(e) => setNewEmpDept(e.target.value)}
+                          placeholder="e.g. Styling, Skin"
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                      <div className="input-group">
+                        <label className="input-label">Mobile Number (Login)</label>
+                        <input
+                          type="tel"
+                          className="input-field"
+                          value={newEmpMobile}
+                          onChange={(e) => setNewEmpMobile(e.target.value)}
+                          placeholder="e.g. 9876543210"
+                        />
+                      </div>
+                      <div className="input-group">
+                        <label className="input-label">Monthly Salary (₹)</label>
+                        <input
+                          type="number"
+                          className="input-field"
+                          value={newEmpSalary}
+                          onChange={(e) => setNewEmpSalary(e.target.value)}
+                          placeholder="25000"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="input-group">
+                      <label className="input-label">Email Address (Optional)</label>
+                      <input
+                        type="email"
+                        className="input-field"
+                        value={newEmpEmail}
+                        onChange={(e) => setNewEmpEmail(e.target.value)}
+                        placeholder="staff@dukeduchess.com"
+                      />
+                    </div>
+
+                    <div className="input-group">
+                      <label className="input-label">Initial Password / PIN *</label>
+                      <input
+                        type="text"
+                        className="input-field"
+                        value={newEmpPassword}
+                        onChange={(e) => setNewEmpPassword(e.target.value)}
+                        placeholder="e.g. emp123 or 1234"
+                        required
+                      />
+                      <span className="text-muted text-sm" style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+                        The employee will use this password and their Employee ID (or Mobile) to log in.
+                      </span>
+                    </div>
+
+                    <div className="flex gap-3" style={{ marginTop: '1rem' }}>
+                      <button type="button" className="btn-secondary" style={{ flex: 1 }} onClick={() => setAddEmpModalOpen(false)}>
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn-primary" style={{ flex: 1 }} disabled={addEmpSubmitting}>
+                        {addEmpSubmitting ? 'Creating...' : 'Create Employee'}
                       </button>
                     </div>
                   </form>

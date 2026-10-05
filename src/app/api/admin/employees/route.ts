@@ -6,7 +6,7 @@ import { User } from '@/lib/models/User';
 import { Attendance } from '@/lib/models/Attendance';
 import bcrypt from 'bcryptjs';
 
-// GET all employees (Admin only)
+// GET all employees (Admin only) with today's attendance status
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== 'ADMIN') {
@@ -16,9 +16,23 @@ export async function GET() {
   await connectDB();
   const employees = await User.find({ role: 'EMPLOYEE' })
     .select('-password')
-    .lean();
+    .sort({ createdAt: -1 })
+    .lean() as any[];
 
-  return NextResponse.json({ employees });
+  // Fetch today's attendance for all staff
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayAttendances = await Attendance.find({ date: todayStr }).lean() as any[];
+  const attendanceMap = new Map();
+  for (const att of todayAttendances) {
+    attendanceMap.set(att.userId.toString(), att);
+  }
+
+  const enrichedEmployees = employees.map((emp) => ({
+    ...emp,
+    todayAttendance: attendanceMap.get(emp._id.toString()) || null
+  }));
+
+  return NextResponse.json({ employees: enrichedEmployees });
 }
 
 // POST create new employee (Admin only)
@@ -38,10 +52,23 @@ export async function POST(req: Request) {
   const hashed = await bcrypt.hash(password, 10);
   
   try {
-    const employee = await User.create({ employeeId, name, mobile, email, designation, department, baseSalary, password: hashed });
+    const employee = await User.create({
+      employeeId: employeeId.trim().toUpperCase(),
+      name: name.trim(),
+      mobile: mobile ? mobile.trim() : undefined,
+      email: email ? email.trim() : undefined,
+      designation: designation ? designation.trim() : 'Stylist',
+      department: department ? department.trim() : 'Styling',
+      baseSalary: baseSalary ? Number(baseSalary) : 0,
+      password: hashed,
+      role: 'EMPLOYEE',
+      status: 'ACTIVE'
+    });
     return NextResponse.json({ employee: { ...employee.toObject(), password: undefined } }, { status: 201 });
   } catch (e: any) {
-    if (e.code === 11000) return NextResponse.json({ error: 'Employee ID or mobile already exists.' }, { status: 409 });
-    throw e;
+    if (e.code === 11000) {
+      return NextResponse.json({ error: 'Employee ID or mobile number already exists.' }, { status: 409 });
+    }
+    return NextResponse.json({ error: e.message || 'Failed to create employee.' }, { status: 500 });
   }
 }
