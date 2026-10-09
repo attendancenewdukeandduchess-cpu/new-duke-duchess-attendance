@@ -29,7 +29,8 @@ import {
   Pencil,
   Save,
   UserX,
-  ScanFace
+  ScanFace,
+  Crown
 } from 'lucide-react';
 import { getFaceDescriptor, loadFaceModels, compareFaceDescriptors } from '@/lib/face-api';
 
