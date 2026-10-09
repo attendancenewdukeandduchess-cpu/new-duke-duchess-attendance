@@ -437,13 +437,23 @@ export default function EmployeeDashboard() {
 
   // Helper to open admin face-capture cameras
   const openAdminCamera = async (type: 'add' | 'edit') => {
-    const videoEl = type === 'add' ? addEmpVideoRef.current : editEmpVideoRef.current;
-    if (!videoEl) return;
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-      videoEl.srcObject = mediaStream;
-      if (type === 'add') { setAddEmpStream(mediaStream); setAddEmpCameraOpen(true); setAddEmpFaceStatus(''); }
-      else { setEditEmpStream(mediaStream); setEditEmpCameraOpen(true); setEditEmpFaceStatus(''); }
+      if (type === 'add') { 
+        setAddEmpStream(mediaStream); 
+        setAddEmpCameraOpen(true); 
+        setAddEmpFaceStatus(''); 
+      } else { 
+        setEditEmpStream(mediaStream); 
+        setEditEmpCameraOpen(true); 
+        setEditEmpFaceStatus(''); 
+      }
+      
+      // Wait for React to render the <video> element before attaching the stream
+      setTimeout(() => {
+        const videoEl = type === 'add' ? addEmpVideoRef.current : editEmpVideoRef.current;
+        if (videoEl) videoEl.srcObject = mediaStream;
+      }, 50);
     } catch {
       alert('Camera access denied. Please allow camera permissions to capture a reference face.');
     }
