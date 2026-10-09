@@ -25,6 +25,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     status,
     password,          // optional — only update if provided
     joiningDate,
+    faceDescriptor,
   } = await req.json();
 
   const updateData: Record<string, any> = {};
@@ -37,6 +38,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (baseSalary !== undefined)  updateData.baseSalary  = Number(baseSalary);
   if (status !== undefined)      updateData.status      = status;
   if (joiningDate !== undefined) updateData.joiningDate = new Date(joiningDate);
+  if (faceDescriptor !== undefined) updateData.faceDescriptor = faceDescriptor;
 
   // Only hash + update password if a new one was provided
   if (password && password.trim() !== '') {

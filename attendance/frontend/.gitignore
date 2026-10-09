@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local database
 attendance.db
+
+# face-api AI model weights (binary files, downloaded via postinstall)
+/public/models/

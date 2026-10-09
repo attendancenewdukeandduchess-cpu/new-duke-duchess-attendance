@@ -13,6 +13,7 @@ export interface IUser extends Document {
   baseSalary: number;
   status: 'ACTIVE' | 'DISABLED';
   profilePhoto?: string;
+  faceDescriptor?: number[];
 }
 
 const UserSchema = new Schema<IUser>({
@@ -28,6 +29,7 @@ const UserSchema = new Schema<IUser>({
   baseSalary: { type: Number, default: 0 },
   status:     { type: String, enum: ['ACTIVE', 'DISABLED'], default: 'ACTIVE' },
   profilePhoto:{ type: String },
+  faceDescriptor: { type: [Number] },
 }, { timestamps: true });
 
 export const User = models.User || model<IUser>('User', UserSchema);

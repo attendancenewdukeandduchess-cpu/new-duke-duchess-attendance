@@ -2,7 +2,7 @@
 
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Camera,
   MapPin,
@@ -28,8 +28,10 @@ import {
   ShieldCheck,
   Pencil,
   Save,
-  UserX
+  UserX,
+  ScanFace
 } from 'lucide-react';
+import { getFaceDescriptor, loadFaceModels, compareFaceDescriptors } from '@/lib/face-api';
 
 export default function EmployeeDashboard() {
   const { data: session, status } = useSession();
@@ -72,6 +74,13 @@ export default function EmployeeDashboard() {
   const [newEmpDept, setNewEmpDept] = useState('Styling');
   const [newEmpSalary, setNewEmpSalary] = useState('25000');
   const [newEmpPassword, setNewEmpPassword] = useState('emp123');
+  const [newEmpFaceDescriptor, setNewEmpFaceDescriptor] = useState<number[] | null>(null);
+  const [addEmpCameraOpen, setAddEmpCameraOpen] = useState(false);
+  const [addEmpCameraLoading, setAddEmpCameraLoading] = useState(false);
+  const [addEmpFaceStatus, setAddEmpFaceStatus] = useState<string>('');
+  const addEmpVideoRef = useRef<HTMLVideoElement>(null);
+  const addEmpCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [addEmpStream, setAddEmpStream] = useState<MediaStream | null>(null);
   const [addEmpSubmitting, setAddEmpSubmitting] = useState(false);
   const [addEmpMsg, setAddEmpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -87,8 +96,19 @@ export default function EmployeeDashboard() {
   const [editEmpStatus, setEditEmpStatus] = useState('ACTIVE');
   const [editEmpPassword, setEditEmpPassword] = useState('');
   const [editEmpJoiningDate, setEditEmpJoiningDate] = useState('');
+  const [editEmpFaceDescriptor, setEditEmpFaceDescriptor] = useState<number[] | null>(null);
+  const [editEmpCameraOpen, setEditEmpCameraOpen] = useState(false);
+  const [editEmpCameraLoading, setEditEmpCameraLoading] = useState(false);
+  const [editEmpFaceStatus, setEditEmpFaceStatus] = useState<string>('');
+  const editEmpVideoRef = useRef<HTMLVideoElement>(null);
+  const editEmpCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [editEmpStream, setEditEmpStream] = useState<MediaStream | null>(null);
   const [editEmpSubmitting, setEditEmpSubmitting] = useState(false);
   const [editEmpMsg, setEditEmpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Face verification states
+  const [faceApiReady, setFaceApiReady] = useState(false);
+  const [faceVerifying, setFaceVerifying] = useState(false);
 
   // Leave Modal states
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
@@ -118,6 +138,10 @@ export default function EmployeeDashboard() {
       if ((session?.user as any)?.role === 'ADMIN') {
         fetchEmployees();
       }
+      // Pre-load face AI models in the background
+      loadFaceModels().then(() => setFaceApiReady(true)).catch(() => {
+        console.warn('Face models not available — facial recognition disabled.');
+      });
     }
   }, [status]);
 
@@ -281,6 +305,7 @@ export default function EmployeeDashboard() {
           baseSalary: Number(editEmpSalary),
           status: editEmpStatus,
           joiningDate: editEmpJoiningDate,
+          ...(editEmpFaceDescriptor ? { faceDescriptor: editEmpFaceDescriptor } : {}),
           ...(editEmpPassword.trim() !== '' ? { password: editEmpPassword } : {})
         })
       });
@@ -319,7 +344,8 @@ export default function EmployeeDashboard() {
           designation: newEmpDesig,
           department: newEmpDept,
           baseSalary: Number(newEmpSalary),
-          password: newEmpPassword
+          password: newEmpPassword,
+          ...(newEmpFaceDescriptor ? { faceDescriptor: newEmpFaceDescriptor } : {})
         })
       });
       const data = await res.json();
@@ -366,17 +392,108 @@ export default function EmployeeDashboard() {
     }
   };
 
-  const captureSelfie = () => {
-    if (videoRef.current && canvasRef.current) {
-      const ctx = canvasRef.current.getContext('2d');
-      if (ctx) {
-        canvasRef.current.width = videoRef.current.videoWidth;
-        canvasRef.current.height = videoRef.current.videoHeight;
-        ctx.drawImage(videoRef.current, 0, 0);
-        const imgData = canvasRef.current.toDataURL('image/jpeg', 0.8);
-        stopCamera();
-        processGPS(imgData);
+  const captureSelfie = async () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    const ctx = canvasRef.current.getContext('2d');
+    if (!ctx) return;
+
+    canvasRef.current.width = videoRef.current.videoWidth;
+    canvasRef.current.height = videoRef.current.videoHeight;
+    ctx.drawImage(videoRef.current, 0, 0);
+    const imgData = canvasRef.current.toDataURL('image/jpeg', 0.8);
+
+    // ── Face Verification ──────────────────────────────────────────────
+    const storedDescriptor = profileData?.user?.faceDescriptor;
+    if (faceApiReady && storedDescriptor && storedDescriptor.length > 0) {
+      setFaceVerifying(true);
+      try {
+        const liveFaceDescriptor = await getFaceDescriptor(videoRef.current);
+        if (!liveFaceDescriptor) {
+          stopCamera();
+          setFaceVerifying(false);
+          setErrorMsg('No face detected in selfie. Please look directly at the camera and try again.');
+          setStep('ERROR');
+          return;
+        }
+        const isMatch = compareFaceDescriptors(liveFaceDescriptor, storedDescriptor);
+        if (!isMatch) {
+          stopCamera();
+          setFaceVerifying(false);
+          setErrorMsg('⚠️ Face does not match registered employee. Attendance REJECTED. If this is an error, please contact your manager.');
+          setStep('ERROR');
+          return;
+        }
+      } catch (e) {
+        console.error('Face verification error:', e);
+        // If models fail to load, allow attendance but log warning
       }
+      setFaceVerifying(false);
+    }
+    // ──────────────────────────────────────────────────────────────────
+
+    stopCamera();
+    processGPS(imgData);
+  };
+
+  // Helper to open admin face-capture cameras
+  const openAdminCamera = async (type: 'add' | 'edit') => {
+    const videoEl = type === 'add' ? addEmpVideoRef.current : editEmpVideoRef.current;
+    if (!videoEl) return;
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      videoEl.srcObject = mediaStream;
+      if (type === 'add') { setAddEmpStream(mediaStream); setAddEmpCameraOpen(true); setAddEmpFaceStatus(''); }
+      else { setEditEmpStream(mediaStream); setEditEmpCameraOpen(true); setEditEmpFaceStatus(''); }
+    } catch {
+      alert('Camera access denied. Please allow camera permissions to capture a reference face.');
+    }
+  };
+
+  const stopAdminCamera = (type: 'add' | 'edit') => {
+    const streamToStop = type === 'add' ? addEmpStream : editEmpStream;
+    if (streamToStop) streamToStop.getTracks().forEach(t => t.stop());
+    if (type === 'add') { setAddEmpStream(null); setAddEmpCameraOpen(false); }
+    else { setEditEmpStream(null); setEditEmpCameraOpen(false); }
+  };
+
+  const captureAdminFace = async (type: 'add' | 'edit') => {
+    const videoEl = type === 'add' ? addEmpVideoRef.current : editEmpVideoRef.current;
+    const canvasEl = type === 'add' ? addEmpCanvasRef.current : editEmpCanvasRef.current;
+    if (!videoEl || !canvasEl) return;
+
+    if (type === 'add') setAddEmpCameraLoading(true);
+    else setEditEmpCameraLoading(true);
+
+    try {
+      const ctx = canvasEl.getContext('2d');
+      if (!ctx) return;
+      canvasEl.width = videoEl.videoWidth;
+      canvasEl.height = videoEl.videoHeight;
+      ctx.drawImage(videoEl, 0, 0);
+
+      const descriptor = await getFaceDescriptor(videoEl);
+      if (!descriptor) {
+        if (type === 'add') setAddEmpFaceStatus('error:No face detected. Please look at the camera and try again.');
+        else setEditEmpFaceStatus('error:No face detected. Please look at the camera and try again.');
+        return;
+      }
+      const descriptorArray = Array.from(descriptor);
+      if (type === 'add') {
+        setNewEmpFaceDescriptor(descriptorArray);
+        setAddEmpFaceStatus('success:✓ Face captured successfully! 128-point map stored.');
+        stopAdminCamera('add');
+      } else {
+        setEditEmpFaceDescriptor(descriptorArray);
+        setEditEmpFaceStatus('success:✓ Face updated successfully! New 128-point map stored.');
+        stopAdminCamera('edit');
+      }
+    } catch (e: any) {
+      const msg = 'error:Failed to scan face. Make sure face-api models are loaded and try again.';
+      if (type === 'add') setAddEmpFaceStatus(msg);
+      else setEditEmpFaceStatus(msg);
+    } finally {
+      if (type === 'add') setAddEmpCameraLoading(false);
+      else setEditEmpCameraLoading(false);
     }
   };
 
@@ -723,17 +840,35 @@ export default function EmployeeDashboard() {
             {step === 'CAMERA' && (
               <div className="card flex flex-col items-center">
                 <h2 style={{ marginBottom: '0.5rem' }}>Take Your Selfie</h2>
-                <p className="text-muted text-center" style={{ marginBottom: '1.5rem' }}>
+                <p className="text-muted text-center" style={{ marginBottom: '0.5rem' }}>
                   Position your face inside the frame and take a live selfie.
                 </p>
+                {faceApiReady && profileData?.user?.faceDescriptor && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--status-present)', marginBottom: '1rem', backgroundColor: 'rgba(16,185,129,0.1)', padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
+                    <ScanFace size={14} />
+                    <span>AI Face Verification Active</span>
+                  </div>
+                )}
+                {!faceApiReady && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    <Clock size={14} className="animate-spin" />
+                    <span>Loading AI models...</span>
+                  </div>
+                )}
                 
                 <div style={{ position: 'relative', width: '100%', maxWidth: '320px', aspectRatio: '3/4', borderRadius: '16px', overflow: 'hidden', backgroundColor: '#000', marginBottom: '1.5rem' }}>
                   <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  {faceVerifying && (
+                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
+                      <ScanFace size={48} style={{ color: 'var(--accent-gold)', animation: 'pulse 1.5s infinite' }} />
+                      <p style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 600 }}>Verifying Face...</p>
+                    </div>
+                  )}
                 </div>
                 <canvas ref={canvasRef} style={{ display: 'none' }} />
 
-                <button className="btn-primary" onClick={captureSelfie} style={{ maxWidth: '320px' }}>
-                  CAPTURE SELFIE
+                <button className="btn-primary" onClick={captureSelfie} disabled={faceVerifying} style={{ maxWidth: '320px' }}>
+                  {faceVerifying ? 'VERIFYING...' : 'CAPTURE SELFIE'}
                 </button>
                 <button className="btn-secondary" style={{ marginTop: '0.75rem', width: '100%', maxWidth: '320px' }} onClick={() => { stopCamera(); setStep('IDLE'); }}>
                   CANCEL
@@ -1530,6 +1665,56 @@ export default function EmployeeDashboard() {
                       </span>
                     </div>
 
+                    {/* Face Registration Section */}
+                    <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem', marginTop: '0.5rem' }}>
+                      <div className="flex items-center justify-between" style={{ marginBottom: '0.75rem' }}>
+                        <div>
+                          <p className="font-bold" style={{ fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <ScanFace size={16} style={{ color: 'var(--accent-gold)' }} />
+                            AI Face Registration
+                          </p>
+                          <p className="text-muted" style={{ fontSize: '0.75rem' }}>
+                            {editEmpData?.faceDescriptor ? '✓ Face data already registered — click to update' : 'No face registered — register to enable AI verification'}
+                          </p>
+                        </div>
+                        {(editEmpFaceDescriptor || editEmpData?.faceDescriptor) && (
+                          <span style={{ fontSize: '0.7rem', backgroundColor: 'rgba(16,185,129,0.1)', color: 'var(--status-present)', padding: '0.2rem 0.5rem', borderRadius: '10px', fontWeight: 600 }}>REGISTERED</span>
+                        )}
+                      </div>
+
+                      {editEmpFaceStatus && (
+                        <div style={{ padding: '0.6rem 0.75rem', borderRadius: '8px', marginBottom: '0.75rem', fontSize: '0.82rem', backgroundColor: editEmpFaceStatus.startsWith('success') ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: editEmpFaceStatus.startsWith('success') ? 'var(--status-present)' : 'var(--status-absent)' }}>
+                          {editEmpFaceStatus.replace(/^(success|error):/, '')}
+                        </div>
+                      )}
+
+                      {editEmpCameraOpen ? (
+                        <div className="flex flex-col items-center">
+                          <div style={{ position: 'relative', width: '100%', maxWidth: '280px', aspectRatio: '4/3', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', marginBottom: '0.75rem' }}>
+                            <video ref={editEmpVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                          <canvas ref={editEmpCanvasRef} style={{ display: 'none' }} />
+                          <div className="flex gap-2" style={{ width: '100%', maxWidth: '280px' }}>
+                            <button type="button" className="btn-secondary" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => stopAdminCamera('edit')}>Cancel</button>
+                            <button type="button" className="btn-primary flex items-center justify-center gap-1" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => captureAdminFace('edit')} disabled={editEmpCameraLoading}>
+                              <ScanFace size={14} />
+                              {editEmpCameraLoading ? 'Scanning...' : 'Scan Face'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-secondary flex items-center justify-center gap-2"
+                          style={{ width: '100%', padding: '0.6rem', fontSize: '0.85rem' }}
+                          onClick={() => openAdminCamera('edit')}
+                        >
+                          <ScanFace size={16} />
+                          {editEmpData?.faceDescriptor ? 'Update Face Registration' : 'Register Employee Face'}
+                        </button>
+                      )}
+                    </div>
+
                     {/* Action Buttons */}
                     <div className="flex gap-3" style={{ marginTop: '1rem' }}>
                       <button
@@ -1678,6 +1863,54 @@ export default function EmployeeDashboard() {
                       <span className="text-muted text-sm" style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
                         The employee will use this password and their Employee ID (or Mobile) to log in.
                       </span>
+                    </div>
+
+                    {/* Face Registration Section */}
+                    <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '1.25rem', marginTop: '0.75rem' }}>
+                      <div className="flex items-center justify-between" style={{ marginBottom: '0.75rem' }}>
+                        <div>
+                          <p className="font-bold" style={{ fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <ScanFace size={16} style={{ color: 'var(--accent-gold)' }} />
+                            AI Face Registration
+                          </p>
+                          <p className="text-muted" style={{ fontSize: '0.75rem' }}>Optional — enables AI identity check on every clock-in</p>
+                        </div>
+                        {newEmpFaceDescriptor && (
+                          <span style={{ fontSize: '0.7rem', backgroundColor: 'rgba(16,185,129,0.1)', color: 'var(--status-present)', padding: '0.2rem 0.5rem', borderRadius: '10px', fontWeight: 600 }}>REGISTERED</span>
+                        )}
+                      </div>
+
+                      {addEmpFaceStatus && (
+                        <div style={{ padding: '0.6rem 0.75rem', borderRadius: '8px', marginBottom: '0.75rem', fontSize: '0.82rem', backgroundColor: addEmpFaceStatus.startsWith('success') ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', color: addEmpFaceStatus.startsWith('success') ? 'var(--status-present)' : 'var(--status-absent)' }}>
+                          {addEmpFaceStatus.replace(/^(success|error):/, '')}
+                        </div>
+                      )}
+
+                      {addEmpCameraOpen ? (
+                        <div className="flex flex-col items-center">
+                          <div style={{ position: 'relative', width: '100%', maxWidth: '280px', aspectRatio: '4/3', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', marginBottom: '0.75rem' }}>
+                            <video ref={addEmpVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                          <canvas ref={addEmpCanvasRef} style={{ display: 'none' }} />
+                          <div className="flex gap-2" style={{ width: '100%', maxWidth: '280px' }}>
+                            <button type="button" className="btn-secondary" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => stopAdminCamera('add')}>Cancel</button>
+                            <button type="button" className="btn-primary flex items-center justify-center gap-1" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => captureAdminFace('add')} disabled={addEmpCameraLoading}>
+                              <ScanFace size={14} />
+                              {addEmpCameraLoading ? 'Scanning...' : 'Scan Face'}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-secondary flex items-center justify-center gap-2"
+                          style={{ width: '100%', padding: '0.6rem', fontSize: '0.85rem' }}
+                          onClick={() => openAdminCamera('add')}
+                        >
+                          <ScanFace size={16} />
+                          {newEmpFaceDescriptor ? '✓ Face Captured — Click to Redo' : 'Capture Reference Face Photo'}
+                        </button>
+                      )}
                     </div>
 
                     <div className="flex gap-3" style={{ marginTop: '1rem' }}>

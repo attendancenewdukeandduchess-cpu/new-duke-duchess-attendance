@@ -65,7 +65,8 @@ export async function GET() {
       department: user.department || 'General',
       joiningDate: user.joiningDate || user.createdAt,
       baseSalary: user.baseSalary || 25000,
-      status: user.status || 'ACTIVE'
+      status: user.status || 'ACTIVE',
+      faceDescriptor: user.faceDescriptor || null
     },
     leaves,
     leaveStats: {
