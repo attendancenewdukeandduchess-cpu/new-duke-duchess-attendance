@@ -747,7 +747,7 @@ export default function EmployeeDashboard() {
                   onClick={() => setAdminPortalModalOpen(true)}
                 >
                   <Sparkles size={20} color="var(--accent-gold)" />
-                  <span>Launch Zoho Billing</span>
+                  <span>Launch Billing System</span>
                 </button>
               </>
             )}
@@ -2087,8 +2087,8 @@ export default function EmployeeDashboard() {
                   <Sparkles size={20} color="var(--accent-gold)" />
                 </div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--accent-gold)' }}>2. Zoho-Style Billing System</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Invoicing, POS, Customers, Services & Reports</div>
+                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--accent-gold)' }}>2. Salon Billing System</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Invoicing, POS Cart, Customers, Catalog & Reports</div>
                 </div>
               </button>
             </div>
