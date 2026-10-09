@@ -33,6 +33,7 @@ import {
   Crown
 } from 'lucide-react';
 import { getFaceDescriptor, loadFaceModels, compareFaceDescriptors } from '@/lib/face-api';
+import ZohoBillingView from '@/components/ZohoBillingView';
 
 export default function EmployeeDashboard() {
   const { data: session, status } = useSession();
@@ -40,7 +41,8 @@ export default function EmployeeDashboard() {
 
   const isAdmin = (session?.user as any)?.role === 'ADMIN';
 
-  // Active navigation tab & Admin Switcher
+  // Mode & Active navigation tab
+  const [viewMode, setViewMode] = useState<'attendance' | 'billing'>('attendance');
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile' | 'employees'>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [adminPortalModalOpen, setAdminPortalModalOpen] = useState(false);
@@ -629,6 +631,33 @@ export default function EmployeeDashboard() {
       emp.mobile?.includes(q)
     );
   });
+
+  if (viewMode === 'billing') {
+    return (
+      <div style={{ position: 'relative' }}>
+        <button
+          onClick={() => setViewMode('attendance')}
+          style={{
+            position: 'fixed',
+            top: '1rem',
+            right: '1rem',
+            zIndex: 9999,
+            backgroundColor: '#d4af37',
+            color: '#000',
+            fontWeight: 700,
+            border: 'none',
+            borderRadius: '8px',
+            padding: '0.5rem 1rem',
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+          }}
+        >
+          ← Switch to Attendance System
+        </button>
+        <ZohoBillingView />
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-layout">
@@ -2007,7 +2036,10 @@ export default function EmployeeDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {/* Option 1: Attendance */}
               <button
-                onClick={() => setAdminPortalModalOpen(false)}
+                onClick={() => {
+                  setViewMode('attendance');
+                  setAdminPortalModalOpen(false);
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -2034,7 +2066,7 @@ export default function EmployeeDashboard() {
               {/* Option 2: Zoho Billing */}
               <button
                 onClick={() => {
-                  window.open('http://localhost:3001', '_blank');
+                  setViewMode('billing');
                   setAdminPortalModalOpen(false);
                 }}
                 style={{
