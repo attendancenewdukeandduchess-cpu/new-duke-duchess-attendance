@@ -6,13 +6,14 @@ import { User } from '@/lib/models/User';
 import bcrypt from 'bcryptjs';
 
 // ── PUT: update employee details (Admin only) ─────────────────────────────────
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   await connectDB();
+  const { id } = await params;
 
   const {
     name,
@@ -44,7 +45,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
   try {
     const updated = await User.findByIdAndUpdate(
-      params.id,
+      id,
       { $set: updateData },
       { new: true, runValidators: true }
     ).select('-password').lean();
@@ -63,16 +64,17 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 // ── DELETE: disable (soft-delete) an employee (Admin only) ───────────────────
-export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== 'ADMIN') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   await connectDB();
+  const { id } = await params;
 
   const updated = await User.findByIdAndUpdate(
-    params.id,
+    id,
     { $set: { status: 'DISABLED' } },
     { new: true }
   ).select('-password').lean();
