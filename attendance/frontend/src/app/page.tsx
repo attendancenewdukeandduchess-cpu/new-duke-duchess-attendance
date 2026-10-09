@@ -373,6 +373,8 @@ export default function EmployeeDashboard() {
   // Camera & GPS workflows
   const startAttendance = async () => {
     setStep('CAMERA');
+    // Ensure we have the latest profile data (like newly registered face descriptors)
+    await fetchProfile();
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
       setStream(mediaStream);
