@@ -404,7 +404,14 @@ export default function EmployeeDashboard() {
 
     // ── Face Verification ──────────────────────────────────────────────
     const storedDescriptor = profileData?.user?.faceDescriptor;
-    if (faceApiReady && storedDescriptor && storedDescriptor.length > 0) {
+    if (storedDescriptor && storedDescriptor.length > 0) {
+      if (!faceApiReady) {
+        stopCamera();
+        setErrorMsg('AI models are still loading. Please wait a moment and try again.');
+        setStep('ERROR');
+        return;
+      }
+      
       setFaceVerifying(true);
       try {
         const liveFaceDescriptor = await getFaceDescriptor(videoRef.current);
@@ -415,6 +422,7 @@ export default function EmployeeDashboard() {
           setStep('ERROR');
           return;
         }
+        
         const isMatch = compareFaceDescriptors(liveFaceDescriptor, storedDescriptor);
         if (!isMatch) {
           stopCamera();
@@ -425,7 +433,11 @@ export default function EmployeeDashboard() {
         }
       } catch (e) {
         console.error('Face verification error:', e);
-        // If models fail to load, allow attendance but log warning
+        stopCamera();
+        setFaceVerifying(false);
+        setErrorMsg('An error occurred while analyzing the face (no face detected or AI model error). Attendance REJECTED.');
+        setStep('ERROR');
+        return;
       }
       setFaceVerifying(false);
     }
