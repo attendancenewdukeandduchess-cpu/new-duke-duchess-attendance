@@ -536,51 +536,57 @@ export default function ZohoBillingView() {
           </div>
         )}
 
-        {/* 3. PRODUCTS & INVENTORY TAB (WITH INVENTORY TRACKING, REORDER ALERTS, EDIT & DELETE) */}
+        {/* 3. PRODUCTS & INVENTORY TAB (SEPARATE PRODUCTS & SERVICES LISTS) */}
         {activeTab === 'products' && (
-          <div style={{ backgroundColor: '#12141d', border: '1px solid #2e344a', borderRadius: '12px', padding: '1.5rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Header Action Bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#12141d', border: '1px solid #2e344a', borderRadius: '12px', padding: '1.25rem 1.5rem' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>Products & Salon Inventory ({products.length})</h3>
-                <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Track physical stock levels, services, reorder alerts, and prices.</p>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: '#fff' }}>Products & Services Catalog</h3>
+                <p style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>Physical inventory and salon service offerings stored separately.</p>
               </div>
               <button
                 onClick={() => { resetPrdForm(); setAddProductModal(true); }}
                 style={{ backgroundColor: '#d4af37', color: '#000', fontWeight: 600, border: 'none', borderRadius: '8px', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
               >
                 <Plus size={16} />
-                <span>Add Item to Inventory</span>
+                <span>Add Item / Service</span>
               </button>
             </div>
 
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #2e344a', color: '#94a3b8' }}>
-                  <th style={{ padding: '0.75rem 1rem' }}>SKU / ID</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Item Name</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Category</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Price (Excl. Tax)</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>GST Rate</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Stock Status</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((p) => {
-                  const isLowStock = !p.isService && p.stock <= p.reorderPoint;
-                  return (
-                    <tr key={p.id} style={{ borderBottom: '1px solid #2e344a' }}>
-                      <td style={{ padding: '1rem', fontWeight: 600, color: '#d4af37' }}>{p.id}</td>
-                      <td style={{ padding: '1rem', color: '#fff', fontWeight: 500 }}>{p.name}</td>
-                      <td style={{ padding: '1rem', color: '#94a3b8' }}>{p.category}</td>
-                      <td style={{ padding: '1rem', color: '#fff', fontWeight: 600 }}>₹ {p.price}</td>
-                      <td style={{ padding: '1rem', color: '#10b981' }}>{p.tax}%</td>
-                      <td style={{ padding: '1rem' }}>
-                        {p.isService ? (
-                          <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', padding: '0.25rem 0.65rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>
-                            Service (Unlimited)
-                          </span>
-                        ) : (
+            {/* SECTION 1: PHYSICAL PRODUCTS INVENTORY */}
+            <div style={{ backgroundColor: '#12141d', border: '1px solid #2e344a', borderRadius: '12px', padding: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#d4af37', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <ShoppingBag size={18} />
+                  <span>Physical Products Inventory ({products.filter(p => !p.isService).length})</span>
+                </h4>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Tracks stock quantities & reorder points</span>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #2e344a', color: '#94a3b8' }}>
+                    <th style={{ padding: '0.75rem 1rem' }}>SKU / ID</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Product Name</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Category</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Price (Excl. Tax)</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>GST Tax</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Stock Level</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.filter(p => !p.isService).map((p) => {
+                    const isLowStock = p.stock <= p.reorderPoint;
+                    return (
+                      <tr key={p.id} style={{ borderBottom: '1px solid #2e344a' }}>
+                        <td style={{ padding: '1rem', fontWeight: 600, color: '#d4af37' }}>{p.id}</td>
+                        <td style={{ padding: '1rem', color: '#fff', fontWeight: 500 }}>{p.name}</td>
+                        <td style={{ padding: '1rem', color: '#94a3b8' }}>{p.category}</td>
+                        <td style={{ padding: '1rem', color: '#fff', fontWeight: 600 }}>₹ {p.price}</td>
+                        <td style={{ padding: '1rem', color: '#10b981' }}>{p.tax}%</td>
+                        <td style={{ padding: '1rem' }}>
                           <span style={{
                             backgroundColor: isLowStock ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
                             color: isLowStock ? '#ef4444' : '#10b981',
@@ -595,7 +601,75 @@ export default function ZohoBillingView() {
                             {isLowStock ? <AlertTriangle size={12} /> : <PackageCheck size={12} />}
                             {p.stock} units in stock {isLowStock ? '(Low Stock!)' : ''}
                           </span>
-                        )}
+                        </td>
+                        <td style={{ padding: '1rem' }}>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <button
+                              onClick={() => {
+                                addToCart(p);
+                                alert(`Added "${p.name}" to POS Cart!`);
+                              }}
+                              style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', color: '#d4af37', border: '1px solid #d4af37', borderRadius: '6px', padding: '0.35rem 0.65rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+                            >
+                              + POS Cart
+                            </button>
+                            <button
+                              onClick={() => openEditProduct(p)}
+                              style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: 'none', padding: '0.35rem 0.6rem', borderRadius: '6px', cursor: 'pointer' }}
+                              title="Edit Product"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProduct(p.id, p.name)}
+                              style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: 'none', padding: '0.35rem 0.6rem', borderRadius: '6px', cursor: 'pointer' }}
+                              title="Delete Product"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* SECTION 2: SALON SERVICES CATALOG */}
+            <div style={{ backgroundColor: '#12141d', border: '1px solid #2e344a', borderRadius: '12px', padding: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                <h4 style={{ fontSize: '1rem', fontWeight: 700, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Scissors size={18} />
+                  <span>Salon Services Catalog ({products.filter(p => p.isService).length})</span>
+                </h4>
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Styling, Spa, Grooming & Skincare services</span>
+              </div>
+
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #2e344a', color: '#94a3b8' }}>
+                    <th style={{ padding: '0.75rem 1rem' }}>Service ID</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Service Name</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Category</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Price (Excl. Tax)</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>GST Tax</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Availability</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.filter(p => p.isService).map((p) => (
+                    <tr key={p.id} style={{ borderBottom: '1px solid #2e344a' }}>
+                      <td style={{ padding: '1rem', fontWeight: 600, color: '#3b82f6' }}>{p.id}</td>
+                      <td style={{ padding: '1rem', color: '#fff', fontWeight: 500 }}>{p.name}</td>
+                      <td style={{ padding: '1rem', color: '#94a3b8' }}>{p.category}</td>
+                      <td style={{ padding: '1rem', color: '#fff', fontWeight: 600 }}>₹ {p.price}</td>
+                      <td style={{ padding: '1rem', color: '#10b981' }}>{p.tax}%</td>
+                      <td style={{ padding: '1rem' }}>
+                        <span style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', padding: '0.25rem 0.65rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>
+                          Active Service
+                        </span>
                       </td>
                       <td style={{ padding: '1rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -604,33 +678,34 @@ export default function ZohoBillingView() {
                               addToCart(p);
                               alert(`Added "${p.name}" to POS Cart!`);
                             }}
-                            style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', color: '#d4af37', border: '1px solid #d4af37', borderRadius: '6px', padding: '0.35rem 0.65rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
+                            style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: '1px solid #3b82f6', borderRadius: '6px', padding: '0.35rem 0.65rem', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600 }}
                           >
-                            + POS
+                            + POS Cart
                           </button>
                           <button
                             onClick={() => openEditProduct(p)}
                             style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', border: 'none', padding: '0.35rem 0.6rem', borderRadius: '6px', cursor: 'pointer' }}
-                            title="Edit Product/Service"
+                            title="Edit Service"
                           >
                             <Pencil size={14} />
                           </button>
                           <button
                             onClick={() => handleDeleteProduct(p.id, p.name)}
                             style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: 'none', padding: '0.35rem 0.6rem', borderRadius: '6px', cursor: 'pointer' }}
-                            title="Delete Product/Service"
+                            title="Delete Service"
                           >
                             <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
+
 
         {/* 4. INVOICES & BILLING TAB (DYNAMIC CART & CATALOG PICKER) */}
         {activeTab === 'invoices' && (
