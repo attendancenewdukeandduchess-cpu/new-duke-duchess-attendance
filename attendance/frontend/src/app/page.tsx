@@ -34,6 +34,8 @@ import {
 } from 'lucide-react';
 import { getFaceDescriptor, loadFaceModels, compareFaceDescriptors } from '@/lib/face-api';
 import ZohoBillingView from '@/components/ZohoBillingView';
+import FuturisticFaceScanner from '@/components/FuturisticFaceScanner';
+import Link from 'next/link';
 
 export default function EmployeeDashboard() {
   const { data: session, status } = useSession();
@@ -377,19 +379,8 @@ export default function EmployeeDashboard() {
 
   // Camera & GPS workflows
   const startAttendance = async () => {
-    setStep('CAMERA');
-    // Ensure we have the latest profile data (like newly registered face descriptors)
     await fetchProfile();
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (err) {
-      setErrorMsg('Camera access denied or unavailable.');
-      setStep('ERROR');
-    }
+    setStep('CAMERA');
   };
 
   const stopCamera = () => {
@@ -455,26 +446,13 @@ export default function EmployeeDashboard() {
   };
 
   // Helper to open admin face-capture cameras
-  const openAdminCamera = async (type: 'add' | 'edit') => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
-      if (type === 'add') { 
-        setAddEmpStream(mediaStream); 
-        setAddEmpCameraOpen(true); 
-        setAddEmpFaceStatus(''); 
-      } else { 
-        setEditEmpStream(mediaStream); 
-        setEditEmpCameraOpen(true); 
-        setEditEmpFaceStatus(''); 
-      }
-      
-      // Wait for React to render the <video> element before attaching the stream
-      setTimeout(() => {
-        const videoEl = type === 'add' ? addEmpVideoRef.current : editEmpVideoRef.current;
-        if (videoEl) videoEl.srcObject = mediaStream;
-      }, 50);
-    } catch {
-      alert('Camera access denied. Please allow camera permissions to capture a reference face.');
+  const openAdminCamera = (type: 'add' | 'edit') => {
+    if (type === 'add') { 
+      setAddEmpCameraOpen(true); 
+      setAddEmpFaceStatus(''); 
+    } else { 
+      setEditEmpCameraOpen(true); 
+      setEditEmpFaceStatus(''); 
     }
   };
 
@@ -751,6 +729,26 @@ export default function EmployeeDashboard() {
                 </button>
               </>
             )}
+
+            <Link
+              href="/scanner"
+              className="nav-item"
+              style={{
+                color: '#00ff66',
+                border: '1px solid rgba(0, 255, 102, 0.3)',
+                backgroundColor: 'rgba(0, 255, 102, 0.08)',
+                marginTop: '0.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                textDecoration: 'none',
+                borderRadius: '8px',
+                padding: '0.75rem 1rem'
+              }}
+            >
+              <ScanFace size={20} color="#00ff66" />
+              <span style={{ fontWeight: 600 }}>Futuristic Face AI</span>
+            </Link>
           </nav>
         </div>
 
@@ -903,43 +901,30 @@ export default function EmployeeDashboard() {
               </>
             )}
 
-            {/* Step: CAMERA */}
+            {/* Step: CAMERA - Futuristic AI Face Recognition Scanner */}
             {step === 'CAMERA' && (
-              <div className="card flex flex-col items-center">
-                <h2 style={{ marginBottom: '0.5rem' }}>Take Your Selfie</h2>
-                <p className="text-muted text-center" style={{ marginBottom: '0.5rem' }}>
-                  Position your face inside the frame and take a live selfie.
-                </p>
-                {faceApiReady && profileData?.user?.faceDescriptor && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--status-present)', marginBottom: '1rem', backgroundColor: 'rgba(16,185,129,0.1)', padding: '0.4rem 0.8rem', borderRadius: '20px' }}>
-                    <ScanFace size={14} />
-                    <span>AI Face Verification Active</span>
-                  </div>
-                )}
-                {!faceApiReady && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                    <Clock size={14} className="animate-spin" />
-                    <span>Loading AI models...</span>
-                  </div>
-                )}
-                
-                <div style={{ position: 'relative', width: '100%', maxWidth: '320px', aspectRatio: '3/4', borderRadius: '16px', overflow: 'hidden', backgroundColor: '#000', marginBottom: '1.5rem' }}>
-                  <video ref={videoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  {faceVerifying && (
-                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}>
-                      <ScanFace size={48} style={{ color: 'var(--accent-gold)', animation: 'pulse 1.5s infinite' }} />
-                      <p style={{ color: '#fff', fontSize: '0.9rem', fontWeight: 600 }}>Verifying Face...</p>
-                    </div>
-                  )}
-                </div>
-                <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-                <button className="btn-primary" onClick={captureSelfie} disabled={faceVerifying} style={{ maxWidth: '320px' }}>
-                  {faceVerifying ? 'VERIFYING...' : 'CAPTURE SELFIE'}
-                </button>
-                <button className="btn-secondary" style={{ marginTop: '0.75rem', width: '100%', maxWidth: '320px' }} onClick={() => { stopCamera(); setStep('IDLE'); }}>
-                  CANCEL
-                </button>
+              <div style={{ width: '100%', maxWidth: '480px', margin: '0 auto', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.8)' }}>
+                <FuturisticFaceScanner
+                  mode="attendance"
+                  employeeName={employeeName}
+                  employeeId={employeeId}
+                  targetDescriptor={profileData?.user?.faceDescriptor || null}
+                  showCloseButton={true}
+                  onCancel={() => {
+                    stopCamera();
+                    setStep('IDLE');
+                  }}
+                  onComplete={({ selfieBase64, isMatched }) => {
+                    stopCamera();
+                    const storedDescriptor = profileData?.user?.faceDescriptor;
+                    if (storedDescriptor && storedDescriptor.length > 0 && !isMatched) {
+                      setErrorMsg('⚠️ Face does not match registered employee. Attendance REJECTED. Please contact your manager.');
+                      setStep('ERROR');
+                      return;
+                    }
+                    processGPS(selfieBase64);
+                  }}
+                />
               </div>
             )}
 
@@ -1756,18 +1741,23 @@ export default function EmployeeDashboard() {
                       )}
 
                       {editEmpCameraOpen ? (
-                        <div className="flex flex-col items-center">
-                          <div style={{ position: 'relative', width: '100%', maxWidth: '280px', aspectRatio: '4/3', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', marginBottom: '0.75rem' }}>
-                            <video ref={editEmpVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                          <canvas ref={editEmpCanvasRef} style={{ display: 'none' }} />
-                          <div className="flex gap-2" style={{ width: '100%', maxWidth: '280px' }}>
-                            <button type="button" className="btn-secondary" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => stopAdminCamera('edit')}>Cancel</button>
-                            <button type="button" className="btn-primary flex items-center justify-center gap-1" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => captureAdminFace('edit')} disabled={editEmpCameraLoading}>
-                              <ScanFace size={14} />
-                              {editEmpCameraLoading ? 'Scanning...' : 'Scan Face'}
-                            </button>
-                          </div>
+                        <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', marginBottom: '0.75rem', backgroundColor: '#030303' }}>
+                          <FuturisticFaceScanner
+                            mode="enroll"
+                            employeeName={editEmpData?.name}
+                            employeeId={editEmpData?.employeeId}
+                            showCloseButton={true}
+                            onCancel={() => stopAdminCamera('edit')}
+                            onComplete={({ descriptor }) => {
+                              if (descriptor) {
+                                setEditEmpFaceDescriptor(descriptor);
+                                setEditEmpFaceStatus('success:✓ Face captured successfully! 128-point biometric map stored.');
+                                stopAdminCamera('edit');
+                              } else {
+                                setEditEmpFaceStatus('error:No face detected. Please try again.');
+                              }
+                            }}
+                          />
                         </div>
                       ) : (
                         <button
@@ -1954,18 +1944,21 @@ export default function EmployeeDashboard() {
                       )}
 
                       {addEmpCameraOpen ? (
-                        <div className="flex flex-col items-center">
-                          <div style={{ position: 'relative', width: '100%', maxWidth: '280px', aspectRatio: '4/3', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#000', marginBottom: '0.75rem' }}>
-                            <video ref={addEmpVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                          <canvas ref={addEmpCanvasRef} style={{ display: 'none' }} />
-                          <div className="flex gap-2" style={{ width: '100%', maxWidth: '280px' }}>
-                            <button type="button" className="btn-secondary" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => stopAdminCamera('add')}>Cancel</button>
-                            <button type="button" className="btn-primary flex items-center justify-center gap-1" style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }} onClick={() => captureAdminFace('add')} disabled={addEmpCameraLoading}>
-                              <ScanFace size={14} />
-                              {addEmpCameraLoading ? 'Scanning...' : 'Scan Face'}
-                            </button>
-                          </div>
+                        <div style={{ width: '100%', borderRadius: '12px', overflow: 'hidden', marginBottom: '0.75rem', backgroundColor: '#030303' }}>
+                          <FuturisticFaceScanner
+                            mode="enroll"
+                            showCloseButton={true}
+                            onCancel={() => stopAdminCamera('add')}
+                            onComplete={({ descriptor }) => {
+                              if (descriptor) {
+                                setNewEmpFaceDescriptor(descriptor);
+                                setAddEmpFaceStatus('success:✓ Face captured successfully! 128-point biometric map stored.');
+                                stopAdminCamera('add');
+                              } else {
+                                setAddEmpFaceStatus('error:No face detected. Please try again.');
+                              }
+                            }}
+                          />
                         </div>
                       ) : (
                         <button
