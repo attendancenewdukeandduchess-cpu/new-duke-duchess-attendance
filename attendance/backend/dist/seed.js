@@ -49,9 +49,9 @@ async function seed() {
     if (!existing) {
         await SalonSettingsModel.create({
             salonName: 'New Duke & Duchess',
-            latitude: 16.974646964942863,
-            longitude: 81.78710560691698,
-            allowedRadius: 20,
+            latitude: 12.968522794458469,
+            longitude: 77.50113592361498,
+            allowedRadius: 200,
             workStartTime: '09:30',
             workEndTime: '19:30',
             gracePeriodMinutes: 15,
