@@ -199,7 +199,44 @@ app.post('/api/admin/employees', async (req, res) => {
   }
 });
 
-// Start Server
+// ── Admin Settings ───────────────────────────────────────────────────────────
+app.get('/api/admin/settings', async (req, res) => {
+  try {
+    await connectDB();
+    const settings = await SalonSettings.findOne().lean();
+    res.json({ settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/admin/settings', async (req, res) => {
+  try {
+    await connectDB();
+    const update = req.body;
+    const settings = await SalonSettings.findOneAndUpdate(
+      {},
+      { $set: update },
+      { new: true, upsert: true }
+    );
+    res.json({ success: true, settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public settings (for frontend check-in)
+app.get('/api/settings', async (req, res) => {
+  try {
+    await connectDB();
+    const settings = await SalonSettings.findOne().lean();
+    res.json({ settings });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 app.listen(PORT, async () => {
   try {
     await connectDB();

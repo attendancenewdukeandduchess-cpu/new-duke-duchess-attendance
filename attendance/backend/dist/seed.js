@@ -44,23 +44,23 @@ async function seed() {
     const empPass = await bcryptjs_1.default.hash('emp123', 10);
     await UserModel.findOneAndUpdate({ employeeId: 'E001' }, { employeeId: 'E001', name: 'Priya Sharma', password: empPass, role: 'EMPLOYEE', designation: 'Senior Stylist', department: 'Styling', baseSalary: 25000 }, { upsert: true, new: true });
     console.log('✓ Employee seeded (ID: E001 / Password: emp123)');
-    // Default salon settings
-    const existing = await SalonSettingsModel.findOne();
-    if (!existing) {
-        await SalonSettingsModel.create({
-            salonName: 'New Duke & Duchess',
-            latitude: 12.968489,
-            longitude: 77.501320,
-            allowedRadius: 50,
-            workStartTime: '09:30',
-            workEndTime: '19:30',
-            gracePeriodMinutes: 15,
-        });
-        console.log('✓ Default salon settings seeded');
-    }
-    else {
-        console.log('✓ Salon settings already exist – skipped');
-    }
+    // Default salon settings – always upsert to ensure correct coordinates
+    await SalonSettingsModel.findOneAndUpdate(
+        {},
+        {
+            $set: {
+                salonName: 'New Duke & Duchess',
+                latitude: 12.968489,
+                longitude: 77.501320,
+                allowedRadius: 50,
+                workStartTime: '09:30',
+                workEndTime: '19:30',
+                gracePeriodMinutes: 15,
+            }
+        },
+        { upsert: true, new: true }
+    );
+    console.log('✓ Salon settings upserted (lat: 12.968489, lng: 77.501320, radius: 50m)');
     await mongoose_1.default.disconnect();
     console.log('\nDatabase seeded successfully! You can now run: npm run dev');
 }
