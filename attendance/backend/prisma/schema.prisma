@@ -103,7 +103,7 @@ model SalonSettings {
   salonName          String   @default("New Duke & Duchess")
   latitude           Float    @default(0.0)
   longitude          Float    @default(0.0)
-  allowedRadius      Float    @default(100.0) // in meters
+  allowedRadius      Float    @default(50.0) // in meters
   workStartTime      String   @default("09:30")
   workEndTime        String   @default("19:30")
   gracePeriodMinutes Int      @default(15)
