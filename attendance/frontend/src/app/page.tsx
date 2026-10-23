@@ -851,7 +851,7 @@ export default function EmployeeDashboard() {
                   {isCheckedIn && (
                     <div className="flex items-center justify-center gap-2" style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                       <MapPin size={14} className="text-gold" />
-                      <span>Salon Location Verified (within 20m)</span>
+                      <span>Salon Location Verified (within 50m)</span>
                     </div>
                   )}
                 </div>
@@ -892,7 +892,7 @@ export default function EmployeeDashboard() {
                       </div>
                       <div>
                         <p className="font-bold">Salon Geofence Active</p>
-                        <p className="text-muted text-sm">Allowed radius: <strong>20 meters</strong> from salon</p>
+                        <p className="text-muted text-sm">Allowed radius: <strong>50 meters</strong> from salon</p>
                       </div>
                     </div>
                     <span className="badge badge-present">ACTIVE</span>
@@ -934,7 +934,7 @@ export default function EmployeeDashboard() {
                 <MapPin size={48} className="text-gold" style={{ marginBottom: '1rem', animation: 'pulse 2s infinite' }} />
                 <h2>Verifying Your Location...</h2>
                 <p className="text-muted" style={{ marginTop: '0.5rem' }}>
-                  Confirming your distance from salon (must be within 20 meters).
+                  Confirming your distance from salon (must be within 50 meters).
                 </p>
               </div>
             )}
@@ -959,7 +959,7 @@ export default function EmployeeDashboard() {
                   </p>
                   <p className="flex justify-between">
                     <span className="text-muted">Radius Check:</span>
-                    <strong style={{ color: 'var(--status-present)' }}>✓ Verified within 20m</strong>
+                    <strong style={{ color: 'var(--status-present)' }}>✓ Verified within 50m</strong>
                   </p>
                 </div>
 
@@ -978,7 +978,7 @@ export default function EmployeeDashboard() {
                 
                 {errorDistance && (
                   <p className="font-bold" style={{ marginTop: '0.75rem', color: 'var(--status-absent)' }}>
-                    Distance from salon: {Math.round(errorDistance)} meters (limit: 20m)
+                    Distance from salon: {Math.round(errorDistance)} meters (limit: 50m)
                   </p>
                 )}
 
