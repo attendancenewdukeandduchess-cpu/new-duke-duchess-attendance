@@ -26,9 +26,9 @@ const UserSchema = new mongoose.Schema({
 
 const SalonSettingsSchema = new mongoose.Schema({
   salonName:          { type: String, default: 'New Duke & Duchess' },
-  latitude:           { type: Number, default: 16.974646964942863 },
-  longitude:          { type: Number, default: 81.78710560691698 },
-  allowedRadius:      { type: Number, default: 20.0 },
+  latitude:           { type: Number, default: 12.968489 },
+  longitude:          { type: Number, default: 77.501320 },
+  allowedRadius:      { type: Number, default: 50.0 },
   workStartTime:      { type: String, default: '09:30' },
   workEndTime:        { type: String, default: '19:30' },
   gracePeriodMinutes: { type: Number, default: 15 },
@@ -87,9 +87,9 @@ async function runSeed() {
     {},
     {
       salonName: 'New Duke & Duchess',
-      latitude: 16.974646964942863,
-      longitude: 81.78710560691698,
-      allowedRadius: 20,
+      latitude: 12.968489,
+      longitude: 77.501320,
+      allowedRadius: 50,
       workStartTime: '09:30',
       workEndTime: '19:30',
       gracePeriodMinutes: 15,
