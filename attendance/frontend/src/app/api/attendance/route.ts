@@ -7,6 +7,11 @@ import { AttendanceAttempt } from '@/lib/models/AttendanceAttempt';
 import { SalonSettings } from '@/lib/models/SalonSettings';
 import { User } from '@/lib/models/User';
 
+// ── SALON LOCATION (source of truth – hardcoded) ──────────────────────────────
+const SALON_LAT    = 12.968489;
+const SALON_LNG    = 77.501320;
+const SALON_RADIUS = 50; // meters
+
 // Haversine formula – server-side geofencing (employees never see salon coordinates)
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371e3;
@@ -46,20 +51,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'GPS accuracy too low. Please enable precise location and try again.' }, { status: 400 });
   }
 
-  // ── 2. Get salon settings (coordinates never exposed to client) ──────────
+  // ── 2. Get salon settings & auto-fix DB if coordinates are wrong ──────────
   let settings = await SalonSettings.findOne().lean() as any;
-  if (!settings || settings.latitude === 0) {
-    return NextResponse.json({ error: 'Salon location not configured. Please contact Admin.' }, { status: 500 });
+  if (!settings) {
+    // No settings at all – create with correct values
+    settings = await SalonSettings.findOneAndUpdate({}, {
+      $set: {
+        latitude: SALON_LAT, longitude: SALON_LNG, allowedRadius: SALON_RADIUS,
+        salonName: 'New Duke & Duchess', workStartTime: '09:30', workEndTime: '19:30',
+        gracePeriodMinutes: 15, checkInEnabled: true, checkOutEnabled: true,
+        gpsRequired: true, selfieRequired: true
+      }
+    }, { upsert: true, new: true }).lean() as any;
+  } else if (settings.latitude !== SALON_LAT || settings.longitude !== SALON_LNG || settings.allowedRadius !== SALON_RADIUS) {
+    // DB has stale/wrong coordinates – silently correct them
+    await SalonSettings.updateMany({}, {
+      $set: { latitude: SALON_LAT, longitude: SALON_LNG, allowedRadius: SALON_RADIUS }
+    });
+    settings.latitude      = SALON_LAT;
+    settings.longitude     = SALON_LNG;
+    settings.allowedRadius = SALON_RADIUS;
   }
 
-  // ── 3. Calculate distance ────────────────────────────────────────────────
-  const distance = haversineDistance(latitude, longitude, settings.latitude, settings.longitude);
+  // ── 3. Calculate distance using hardcoded correct coordinates ────────────
+  const distance = haversineDistance(latitude, longitude, SALON_LAT, SALON_LNG);
   const userId   = (session.user as any).id;
   const now      = new Date();
   const todayStr = now.toISOString().split('T')[0];
 
   // ── 4. Outside geofence → record rejected attempt ────────────────────────
-  if (distance > settings.allowedRadius) {
+  if (distance > SALON_RADIUS) {
     await AttendanceAttempt.create({
       userId,
       latitude,
@@ -67,17 +88,17 @@ export async function POST(req: Request) {
       accuracy,
       distance,
       selfie,
-      rejectionReason: `Outside allowed radius (${Math.round(distance)}m from salon, limit ${settings.allowedRadius}m)`
+      rejectionReason: `Outside allowed radius (${Math.round(distance)}m from salon, limit ${SALON_RADIUS}m)`
     });
     return NextResponse.json({
       error: 'Outside Geofence',
       distance: Math.round(distance),
-      allowed:  settings.allowedRadius
+      allowed:  SALON_RADIUS
     }, { status: 403 });
   }
 
   // ── 5. Determine attendance status ───────────────────────────────────────
-  const [startH, startM] = settings.workStartTime.split(':').map(Number);
+  const [startH, startM] = (settings.workStartTime || '09:30').split(':').map(Number);
   const graceMinutes     = settings.gracePeriodMinutes || 15;
   const lateThreshold    = new Date(now);
   lateThreshold.setHours(startH, startM + graceMinutes, 0, 0);
