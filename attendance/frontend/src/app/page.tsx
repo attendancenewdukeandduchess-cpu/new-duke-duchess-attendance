@@ -30,7 +30,8 @@ import {
   Save,
   UserX,
   ScanFace,
-  Crown
+  Crown,
+  Trash2
 } from 'lucide-react';
 import { getFaceDescriptor, loadFaceModels, compareFaceDescriptors } from '@/lib/face-api';
 import ZohoBillingView from '@/components/ZohoBillingView';
@@ -111,6 +112,12 @@ export default function EmployeeDashboard() {
   const [editEmpStream, setEditEmpStream] = useState<MediaStream | null>(null);
   const [editEmpSubmitting, setEditEmpSubmitting] = useState(false);
   const [editEmpMsg, setEditEmpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Delete employee states
+  const [deleteEmpModalOpen, setDeleteEmpModalOpen] = useState(false);
+  const [deleteEmpData, setDeleteEmpData] = useState<{ _id: string; name: string; employeeId: string } | null>(null);
+  const [deleteEmpSubmitting, setDeleteEmpSubmitting] = useState(false);
+  const [deleteEmpMsg, setDeleteEmpMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Face verification states
   const [faceApiReady, setFaceApiReady] = useState(false);
@@ -374,6 +381,32 @@ export default function EmployeeDashboard() {
       setAddEmpMsg({ type: 'error', text: 'Network error adding employee.' });
     } finally {
       setAddEmpSubmitting(false);
+    }
+  };
+
+  // Delete employee (Admin)
+  const handleDeleteEmployee = async () => {
+    if (!deleteEmpData) return;
+    setDeleteEmpSubmitting(true);
+    setDeleteEmpMsg(null);
+    try {
+      const res = await fetch(`/api/admin/employees/${deleteEmpData._id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (res.ok) {
+        setDeleteEmpMsg({ type: 'success', text: `${deleteEmpData.name} has been removed from the system.` });
+        fetchEmployees();
+        setTimeout(() => {
+          setDeleteEmpModalOpen(false);
+          setDeleteEmpData(null);
+          setDeleteEmpMsg(null);
+        }, 1800);
+      } else {
+        setDeleteEmpMsg({ type: 'error', text: data.error || 'Failed to delete employee.' });
+      }
+    } catch (err) {
+      setDeleteEmpMsg({ type: 'error', text: 'Network error. Please try again.' });
+    } finally {
+      setDeleteEmpSubmitting(false);
     }
   };
 
@@ -1500,7 +1533,7 @@ export default function EmployeeDashboard() {
                           <div style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'rgba(197, 160, 89, 0.2)', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.05rem', flexShrink: 0 }}>
                             {emp.name?.[0] || 'E'}
                           </div>
-                          <div>
+                           <div>
                             <div className="flex items-center gap-2">
                               <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{emp.name}</h3>
                               <span className="badge" style={{ backgroundColor: '#f3f4f6', color: 'var(--text-main)', fontSize: '0.75rem' }}>
@@ -1511,41 +1544,62 @@ export default function EmployeeDashboard() {
                           </div>
                         </div>
 
-                        {/* Today's Status Badge + Edit Button */}
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openEditModal(emp)}
-                            title="Edit employee details"
-                            style={{
-                              background: 'rgba(197,160,89,0.12)',
-                              border: '1px solid rgba(197,160,89,0.3)',
-                              borderRadius: '8px',
-                              padding: '0.35rem 0.65rem',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.35rem',
-                              color: 'var(--accent-gold)',
-                              fontSize: '0.8rem',
-                              fontWeight: 600
-                            }}
-                          >
-                            <Pencil size={14} />
-                            Edit
-                          </button>
+                        {/* Action Buttons + Today Status */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openEditModal(emp)}
+                              title="Edit employee details"
+                              style={{
+                                background: 'rgba(197,160,89,0.12)',
+                                border: '1px solid rgba(197,160,89,0.3)',
+                                borderRadius: '8px',
+                                padding: '0.35rem 0.65rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                color: 'var(--accent-gold)',
+                                fontSize: '0.8rem',
+                                fontWeight: 600
+                              }}
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => { setDeleteEmpData({ _id: emp._id, name: emp.name, employeeId: emp.employeeId }); setDeleteEmpModalOpen(true); }}
+                              title="Remove employee from system"
+                              style={{
+                                background: 'rgba(239,68,68,0.1)',
+                                border: '1px solid rgba(239,68,68,0.3)',
+                                borderRadius: '8px',
+                                padding: '0.35rem 0.65rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.35rem',
+                                color: '#ef4444',
+                                fontSize: '0.8rem',
+                                fontWeight: 600
+                              }}
+                            >
+                              <Trash2 size={14} />
+                              Remove
+                            </button>
+                          </div>
+                          <div>
+                            {!isCheckedIn && (
+                              <span className="badge badge-absent">NOT MARKED TODAY</span>
+                            )}
+                            {isCheckedIn && !isCheckedOut && (
+                              <span className="badge badge-present">PRESENT (CHECKED IN)</span>
+                            )}
+                            {isCheckedOut && (
+                              <span className="badge badge-present">CHECKED OUT</span>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          {!isCheckedIn && (
-                            <span className="badge badge-absent">NOT MARKED TODAY</span>
-                          )}
-                          {isCheckedIn && !isCheckedOut && (
-                            <span className="badge badge-present">PRESENT (CHECKED IN)</span>
-                          )}
-                          {isCheckedOut && (
-                            <span className="badge badge-present">CHECKED OUT</span>
-                          )}
-                        </div>
-                      </div>
 
                       {/* Details row */}
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem', fontSize: '0.85rem' }}>
@@ -1569,6 +1623,93 @@ export default function EmployeeDashboard() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* ── Modal: Confirm Delete Employee ──────────────────────── */}
+            {deleteEmpModalOpen && deleteEmpData && (
+              <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: '1rem' }}>
+                <div className="card" style={{ width: '100%', maxWidth: '440px', margin: 0 }}>
+                  {/* Header */}
+                  <div className="flex justify-between items-center" style={{ marginBottom: '1.25rem' }}>
+                    <div className="flex items-center gap-3">
+                      <div style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: 'rgba(239,68,68,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Trash2 size={20} style={{ color: '#ef4444' }} />
+                      </div>
+                      <div>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 700 }}>Remove Member</h3>
+                        <p className="text-muted text-sm">This action cannot be undone</p>
+                      </div>
+                    </div>
+                    <button onClick={() => { setDeleteEmpModalOpen(false); setDeleteEmpData(null); setDeleteEmpMsg(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Feedback */}
+                  {deleteEmpMsg && (
+                    <div style={{
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      marginBottom: '1rem',
+                      fontSize: '0.85rem',
+                      backgroundColor: deleteEmpMsg.type === 'success' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                      color: deleteEmpMsg.type === 'success' ? 'var(--status-present)' : 'var(--status-absent)'
+                    }}>
+                      {deleteEmpMsg.text}
+                    </div>
+                  )}
+
+                  {/* Employee Info */}
+                  <div style={{ backgroundColor: '#f9fafb', borderRadius: '10px', padding: '1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: 'rgba(197,160,89,0.2)', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1.1rem', flexShrink: 0 }}>
+                      {deleteEmpData.name?.[0] || 'E'}
+                    </div>
+                    <div>
+                      <p className="font-bold" style={{ fontSize: '1rem' }}>{deleteEmpData.name}</p>
+                      <p className="text-muted text-sm">ID: {deleteEmpData.employeeId}</p>
+                    </div>
+                  </div>
+
+                  <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+                    Are you sure you want to permanently remove <strong>{deleteEmpData.name}</strong> from the salon system? All their data including attendance records will remain, but they will no longer be able to log in.
+                  </p>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-3">
+                    <button
+                      className="btn-secondary"
+                      style={{ flex: 1 }}
+                      onClick={() => { setDeleteEmpModalOpen(false); setDeleteEmpData(null); setDeleteEmpMsg(null); }}
+                      disabled={deleteEmpSubmitting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleDeleteEmployee}
+                      disabled={deleteEmpSubmitting}
+                      style={{
+                        flex: 1,
+                        backgroundColor: '#ef4444',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '10px',
+                        padding: '0.75rem',
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
+                        cursor: deleteEmpSubmitting ? 'not-allowed' : 'pointer',
+                        opacity: deleteEmpSubmitting ? 0.7 : 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem'
+                      }}
+                    >
+                      <Trash2 size={16} />
+                      {deleteEmpSubmitting ? 'Removing...' : 'Yes, Remove Member'}
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

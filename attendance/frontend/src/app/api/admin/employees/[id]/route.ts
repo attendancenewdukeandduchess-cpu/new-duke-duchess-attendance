@@ -65,7 +65,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   }
 }
 
-// ── DELETE: disable (soft-delete) an employee (Admin only) ───────────────────
+// ── DELETE: permanently remove an employee (Admin only) ───────────────────────
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== 'ADMIN') {
@@ -75,15 +75,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   await connectDB();
   const { id } = await params;
 
-  const updated = await User.findByIdAndUpdate(
-    id,
-    { $set: { status: 'DISABLED' } },
-    { new: true }
-  ).select('-password').lean();
+  // Prevent admin from deleting themselves
+  const requestingAdmin = await User.findById((session.user as any).id).lean() as any;
+  if (requestingAdmin?._id?.toString() === id) {
+    return NextResponse.json({ error: 'You cannot delete your own admin account.' }, { status: 400 });
+  }
 
-  if (!updated) {
+  const deleted = await User.findByIdAndDelete(id).lean();
+
+  if (!deleted) {
     return NextResponse.json({ error: 'Employee not found.' }, { status: 404 });
   }
 
-  return NextResponse.json({ success: true, message: 'Employee disabled.' });
+  return NextResponse.json({ success: true, message: 'Employee permanently deleted.' });
 }
