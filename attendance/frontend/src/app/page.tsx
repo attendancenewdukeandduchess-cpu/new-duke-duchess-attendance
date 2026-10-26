@@ -1601,7 +1601,6 @@ export default function EmployeeDashboard() {
                           </div>
                         </div>
                       </div>
-                    </div>
 
                       {/* Details row */}
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem', fontSize: '0.85rem' }}>
