@@ -199,6 +199,21 @@ app.post('/api/admin/employees', async (req, res) => {
   }
 });
 
+// ── Delete Employee ───────────────────────────────────────────────────────────
+app.delete('/api/admin/employees/:id', async (req, res) => {
+  try {
+    await connectDB();
+    const { id } = req.params;
+    const deleted = await User.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Employee not found' });
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Admin Settings ───────────────────────────────────────────────────────────
 app.get('/api/admin/settings', async (req, res) => {
   try {
