@@ -973,34 +973,146 @@ export default function EmployeeDashboard() {
             )}
 
             {/* Step: SUCCESS */}
+            {step === 'SUCCESS' && (() => {
+              // Play a pleasant success chime using Web Audio API
+              try {
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                const playTone = (freq: number, startTime: number, duration: number) => {
+                  const osc = audioCtx.createOscillator();
+                  const gain = audioCtx.createGain();
+                  osc.connect(gain);
+                  gain.connect(audioCtx.destination);
+                  osc.type = 'sine';
+                  osc.frequency.setValueAtTime(freq, audioCtx.currentTime + startTime);
+                  gain.gain.setValueAtTime(0.18, audioCtx.currentTime + startTime);
+                  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startTime + duration);
+                  osc.start(audioCtx.currentTime + startTime);
+                  osc.stop(audioCtx.currentTime + startTime + duration);
+                };
+                playTone(523.25, 0, 0.15);    // C5
+                playTone(659.25, 0.12, 0.15);  // E5
+                playTone(783.99, 0.24, 0.3);   // G5
+              } catch (_) { /* audio not available */ }
+              return null;
+            })()}
             {step === 'SUCCESS' && (
-              <div className="card flex flex-col items-center justify-center text-center">
-                <CheckCircle size={64} className="text-gold" style={{ marginBottom: '1rem' }} />
-                <h2>✓ ATTENDANCE MARKED</h2>
-                <p className="font-bold" style={{ fontSize: '1.25rem', marginTop: '0.5rem' }}>
-                  You are marked {isCheckedIn ? 'Checked Out' : 'Present'}
+              <div className="card flex flex-col items-center justify-center text-center" style={{ overflow: 'hidden' }}>
+                {/* Inject animation keyframes */}
+                <style>{`
+                  @keyframes successBounce {
+                    0% { transform: scale(0); opacity: 0; }
+                    50% { transform: scale(1.25); opacity: 1; }
+                    70% { transform: scale(0.9); }
+                    100% { transform: scale(1); opacity: 1; }
+                  }
+                  @keyframes successFadeUp {
+                    0% { transform: translateY(20px); opacity: 0; }
+                    100% { transform: translateY(0); opacity: 1; }
+                  }
+                  @keyframes successPulseRing {
+                    0% { transform: scale(0.8); opacity: 0.6; }
+                    100% { transform: scale(2.2); opacity: 0; }
+                  }
+                `}</style>
+
+                {/* Animated tick with pulse ring */}
+                <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    width: '80px',
+                    height: '80px',
+                    marginLeft: '-40px',
+                    marginTop: '-40px',
+                    borderRadius: '50%',
+                    border: '3px solid var(--accent-gold)',
+                    animation: 'successPulseRing 1.5s ease-out forwards'
+                  }} />
+                  <div style={{
+                    width: '80px',
+                    height: '80px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, var(--accent-gold), #d4a020)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    animation: 'successBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards',
+                    boxShadow: '0 8px 32px rgba(197, 160, 89, 0.35)'
+                  }}>
+                    <CheckCircle size={44} color="#fff" strokeWidth={2.5} />
+                  </div>
+                </div>
+
+                {/* Employee name greeting */}
+                <h2 style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 800,
+                  color: 'var(--text-main)',
+                  animation: 'successFadeUp 0.5s ease-out 0.3s both'
+                }}>
+                  {isCheckedIn ? 'See You Tomorrow!' : 'Welcome,'} {employeeName.split(' ')[0]}!
+                </h2>
+
+                <p style={{
+                  fontSize: '1.05rem',
+                  color: 'var(--accent-gold)',
+                  fontWeight: 600,
+                  marginTop: '0.5rem',
+                  animation: 'successFadeUp 0.5s ease-out 0.45s both'
+                }}>
+                  {isCheckedIn
+                    ? `Your check-out for today has been recorded ✓`
+                    : `Your attendance for today is marked ✓`}
+                </p>
+
+                <p className="text-muted" style={{
+                  fontSize: '0.9rem',
+                  marginTop: '0.25rem',
+                  animation: 'successFadeUp 0.5s ease-out 0.55s both'
+                }}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
                 
-                <div style={{ marginTop: '1.5rem', width: '100%', maxWidth: '400px', textAlign: 'left', backgroundColor: '#f9fafb', padding: '1rem', borderRadius: '8px' }}>
-                  <p className="flex justify-between" style={{ marginBottom: '0.5rem' }}>
-                    <span className="text-muted">Time:</span>
+                <div style={{
+                  marginTop: '1.5rem',
+                  width: '100%',
+                  maxWidth: '400px',
+                  textAlign: 'left',
+                  backgroundColor: 'rgba(197, 160, 89, 0.06)',
+                  border: '1px solid rgba(197, 160, 89, 0.15)',
+                  padding: '1rem 1.25rem',
+                  borderRadius: '12px',
+                  animation: 'successFadeUp 0.5s ease-out 0.65s both'
+                }}>
+                  <p className="flex justify-between" style={{ marginBottom: '0.6rem' }}>
+                    <span className="text-muted">Employee</span>
+                    <strong>{employeeName}</strong>
+                  </p>
+                  <p className="flex justify-between" style={{ marginBottom: '0.6rem' }}>
+                    <span className="text-muted">Time</span>
                     <strong>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
                   </p>
-                  <p className="flex justify-between" style={{ marginBottom: '0.5rem' }}>
-                    <span className="text-muted">Location:</span>
+                  <p className="flex justify-between" style={{ marginBottom: '0.6rem' }}>
+                    <span className="text-muted">Location</span>
                     <strong>New Duke & Duchess</strong>
                   </p>
                   <p className="flex justify-between">
-                    <span className="text-muted">Radius Check:</span>
-                    <strong style={{ color: 'var(--status-present)' }}>✓ Verified within 50m</strong>
+                    <span className="text-muted">GPS Verified</span>
+                    <strong style={{ color: 'var(--status-present)' }}>✓ Within 50m</strong>
                   </p>
                 </div>
 
-                <button className="btn-primary" style={{ marginTop: '2rem', maxWidth: '320px' }} onClick={() => setStep('IDLE')}>
+                <button className="btn-primary" style={{
+                  marginTop: '2rem',
+                  maxWidth: '320px',
+                  animation: 'successFadeUp 0.5s ease-out 0.8s both'
+                }} onClick={() => setStep('IDLE')}>
                   DONE
                 </button>
               </div>
             )}
+
 
             {/* Step: ERROR */}
             {step === 'ERROR' && (
