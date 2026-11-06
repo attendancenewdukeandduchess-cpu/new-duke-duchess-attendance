@@ -90,6 +90,18 @@ export default function ZohoBillingView() {
     { id: 'CUST-003', name: 'Priya Sundaram', phone: '+91 97654 32109', email: 'priya@example.com', visits: 5, balance: 6500, tag: 'Premium' },
   ]);
 
+  // ── Add Customer Modal state
+  const [showAddCustomer, setShowAddCustomer] = useState(false);
+  const [newCustName,     setNewCustName]     = useState('');
+  const [newCustPhone,    setNewCustPhone]    = useState('');
+  const [newCustEmail,    setNewCustEmail]    = useState('');
+  const [newCustTag,      setNewCustTag]      = useState('Regular');
+  const [customerSearch,  setCustomerSearch]  = useState('');
+
+  // ── POS phone lookup state
+  const [phoneLookupStatus, setPhoneLookupStatus] = useState<'idle' | 'found' | 'new'>('idle');
+  const [phoneLookupMsg,    setPhoneLookupMsg]    = useState('');
+
   // Catalogue sub-tab state
   const [catalogueTab, setCatalogueTab] = useState<'men' | 'women' | 'products'>('men');
 
@@ -496,6 +508,30 @@ export default function ZohoBillingView() {
     setEditPrdId(null);
   };
 
+  // ── Add Customer handler
+  const handleAddCustomer = () => {
+    if (!newCustName.trim() || !newCustPhone.trim()) return;
+    const newId = `CUST-${String(customers.length + 1).padStart(3, '0')}`;
+    setCustomers(prev => [{ id: newId, name: newCustName.trim(), phone: newCustPhone.trim(), email: newCustEmail.trim(), visits: 0, balance: 0, tag: newCustTag }, ...prev]);
+    setNewCustName(''); setNewCustPhone(''); setNewCustEmail(''); setNewCustTag('Regular');
+    setShowAddCustomer(false);
+  };
+
+  // ── Phone lookup for POS billing
+  const lookupCustomerByPhone = (phone: string) => {
+    if (!phone.trim()) { setPhoneLookupStatus('idle'); setPhoneLookupMsg(''); return; }
+    const normalized = phone.replace(/\s+/g, '');
+    const found = customers.find(c => c.phone.replace(/\s+/g, '').includes(normalized));
+    if (found) {
+      setPosCustomer(found.name);
+      setPhoneLookupStatus('found');
+      setPhoneLookupMsg(`✅ Existing customer: ${found.name} (${found.visits} visits, ${found.tag})`);
+    } else {
+      setPhoneLookupStatus('new');
+      setPhoneLookupMsg(`🆕 New customer — will be added on bill generation`);
+    }
+  };
+
   // Quick Modal State
   const [newInvoiceModal, setNewInvoiceModal] = useState(false);
   const [invCustomer, setInvCustomer] = useState('');
@@ -562,9 +598,16 @@ export default function ZohoBillingView() {
   const handleGenerateBill = () => {
     if (cartItems.length === 0) { alert('⚠️ Cart is empty. Please add services first.'); return; }
     const serviceNames = cartItems.map(c => `${c.name} x${c.qty}`).join(', ');
+    const customerName = posCustomer || 'Walk-in Client';
+    if (phoneLookupStatus === 'new' && posPhone.trim() && customerName !== 'Walk-in Client') {
+      const newId = `CUST-${String(customers.length + 1).padStart(3, '0')}`;
+      setCustomers(prev => [...prev, { id: newId, name: customerName, phone: posPhone.trim(), email: '', visits: 1, balance: 0, tag: 'Regular' }]);
+    } else if (phoneLookupStatus === 'found' && posPhone.trim()) {
+      setCustomers(prev => prev.map(c => c.phone.replace(/\s+/g, '').includes(posPhone.replace(/\s+/g, '')) ? { ...c, visits: c.visits + 1 } : c));
+    }
     const newInv = {
       id: `INV-00${invoices.length + 105}`,
-      customer: posCustomer || 'Walk-in Client',
+      customer: customerName,
       phone: posPhone,
       service: serviceNames,
       date: new Date().toISOString().split('T')[0],
@@ -577,10 +620,10 @@ export default function ZohoBillingView() {
     setInvoices(prev => [newInv, ...prev]);
     setBillSuccess(true);
     setTimeout(() => {
-      setBillSuccess(false);
-      setCartItems([]);
+      setBillSuccess(false); setCartItems([]);
       setPosCustomer(''); setPosPhone('');
       setDiscountValue(''); setGstRate(18);
+      setPhoneLookupStatus('idle'); setPhoneLookupMsg('');
     }, 2500);
   };
 
@@ -763,36 +806,68 @@ export default function ZohoBillingView() {
 
         {/* Customers View */}
         {activeTab === 'customers' && (
-          <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '1.25rem' }}>Customer Directory</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
-                  <th style={{ padding: '0.75rem 1rem' }}>Client ID</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Name</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Phone</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Email</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Total Visits</th>
-                  <th style={{ padding: '0.75rem 1rem' }}>Membership</th>
-                </tr>
-              </thead>
-              <tbody>
-                {customers.map((c) => (
-                  <tr key={c.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                    <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--accent-gold)' }}>{c.id}</td>
-                    <td style={{ padding: '1rem', color: 'var(--text-main)' }}>{c.name}</td>
-                    <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{c.phone}</td>
-                    <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{c.email}</td>
-                    <td style={{ padding: '1rem', color: 'var(--text-main)' }}>{c.visits} Visits</td>
-                    <td style={{ padding: '1rem' }}>
-                      <span style={{ backgroundColor: 'rgba(212, 175, 55, 0.15)', color: 'var(--accent-gold)', padding: '0.25rem 0.65rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>
-                        {c.tag}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Customer Directory</h3>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.2rem 0 0' }}>{customers.length} registered clients</p>
+              </div>
+              <button onClick={() => setShowAddCustomer(true)} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg, #d4af37, #c5a028)', color: '#000', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(212,175,55,0.35)' }}>
+                <Plus size={16} /> Add Customer
+              </button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
+              {[{ label: 'Total Clients', value: customers.length, color: '#d4af37' }, { label: 'VIP Members', value: customers.filter(c => c.tag === 'VIP Member').length, color: '#10b981' }, { label: 'Total Visits', value: customers.reduce((s,c) => s+c.visits,0), color: '#3b82f6' }].map(s => (
+                <div key={s.label} style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '1rem 1.25rem' }}>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>{s.label}</div>
+                  <div style={{ fontSize: '1.6rem', fontWeight: 700, color: s.color }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ position: 'relative', marginBottom: '1rem' }}>
+              <Search size={15} color="var(--text-muted)" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />
+              <input value={customerSearch} onChange={e => setCustomerSearch(e.target.value)} placeholder="Search by name, phone, email or membership..." style={{ width: '100%', padding: '0.6rem 0.75rem 0.6rem 2.2rem', borderRadius: '10px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-main)', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }} />
+            </div>
+            <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.875rem' }}>
+                <thead><tr style={{ backgroundColor: '#1a1a1a', color: 'var(--text-muted)' }}><th style={{ padding: '0.75rem 1rem' }}>Client ID</th><th style={{ padding: '0.75rem 1rem' }}>Name</th><th style={{ padding: '0.75rem 1rem' }}>Phone</th><th style={{ padding: '0.75rem 1rem' }}>Email</th><th style={{ padding: '0.75rem 1rem' }}>Total Visits</th><th style={{ padding: '0.75rem 1rem' }}>Membership</th></tr></thead>
+                <tbody>
+                  {customers.filter(c => { const q = customerSearch.toLowerCase(); return !q || c.name.toLowerCase().includes(q) || c.phone.includes(q) || c.email.toLowerCase().includes(q) || c.tag.toLowerCase().includes(q); }).map(c => (
+                    <tr key={c.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>{c.id}</td>
+                      <td style={{ padding: '1rem' }}><div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}><div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: 'rgba(212,175,55,0.15)', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.9rem' }}>{c.name[0]}</div><span style={{ color: 'var(--text-main)', fontWeight: 500 }}>{c.name}</span></div></td>
+                      <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{c.phone}</td>
+                      <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{c.email || '—'}</td>
+                      <td style={{ padding: '1rem', color: 'var(--text-main)', fontWeight: 600 }}>{c.visits} Visits</td>
+                      <td style={{ padding: '1rem' }}><span style={{ backgroundColor: c.tag==='VIP Member'?'rgba(16,185,129,0.15)':c.tag==='Premium'?'rgba(59,130,246,0.15)':'rgba(212,175,55,0.15)', color: c.tag==='VIP Member'?'#10b981':c.tag==='Premium'?'#3b82f6':'var(--accent-gold)', padding: '0.25rem 0.65rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600 }}>{c.tag}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {showAddCustomer && (
+              <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '1.75rem', width: '100%', maxWidth: '460px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: '10px', backgroundColor: 'rgba(212,175,55,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={20} color="var(--accent-gold)" /></div>
+                      <div><div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-main)' }}>Add New Customer</div><div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Register a new salon client</div></div>
+                    </div>
+                    <button onClick={() => setShowAddCustomer(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={20} /></button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div><label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>Full Name *</label><div style={{ position: 'relative' }}><User size={14} color="var(--text-muted)" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} /><input value={newCustName} onChange={e => setNewCustName(e.target.value)} placeholder="e.g. Priya Sharma" style={{ width: '100%', padding: '0.6rem 0.75rem 0.6rem 2rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }} /></div></div>
+                    <div><label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>Phone Number *</label><div style={{ position: 'relative' }}><Phone size={14} color="var(--text-muted)" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }} /><input value={newCustPhone} onChange={e => setNewCustPhone(e.target.value)} placeholder="e.g. +91 98765 43210" style={{ width: '100%', padding: '0.6rem 0.75rem 0.6rem 2rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }} /></div></div>
+                    <div><label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>Email</label><input value={newCustEmail} onChange={e => setNewCustEmail(e.target.value)} placeholder="e.g. priya@example.com" type="email" style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.875rem', outline: 'none', boxSizing: 'border-box' }} /></div>
+                    <div><label style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '0.4rem' }}>Membership</label><select value={newCustTag} onChange={e => setNewCustTag(e.target.value)} style={{ width: '100%', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.875rem', outline: 'none' }}><option value="Regular">Regular</option><option value="Premium">Premium</option><option value="VIP Member">VIP Member</option></select></div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                    <button onClick={() => setShowAddCustomer(false)} style={{ flex: 1, padding: '0.7rem', borderRadius: '9px', border: '1px solid var(--border-color)', backgroundColor: 'transparent', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={handleAddCustomer} disabled={!newCustName.trim() || !newCustPhone.trim()} style={{ flex: 2, padding: '0.7rem', borderRadius: '9px', border: 'none', background: !newCustName.trim()||!newCustPhone.trim()?'#444':'linear-gradient(135deg,#d4af37,#c5a028)', color: !newCustName.trim()||!newCustPhone.trim()?'#888':'#000', fontWeight: 700, fontSize: '0.875rem', cursor: !newCustName.trim()||!newCustPhone.trim()?'not-allowed':'pointer' }}>✓ Save Customer</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
