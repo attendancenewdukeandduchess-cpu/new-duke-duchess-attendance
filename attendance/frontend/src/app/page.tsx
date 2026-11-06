@@ -31,7 +31,12 @@ import {
   UserX,
   ScanFace,
   Crown,
-  Trash2
+  Trash2,
+  Filter,
+  ChevronDown,
+  UserCheck,
+  UserMinus,
+  TrendingUp
 } from 'lucide-react';
 import { getFaceDescriptor, loadFaceModels, compareFaceDescriptors } from '@/lib/face-api';
 import ZohoBillingView from '@/components/ZohoBillingView';
@@ -54,11 +59,22 @@ export default function EmployeeDashboard() {
   const [attendance, setAttendance] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  // History states
+  // History states (employee's own)
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyStats, setHistoryStats] = useState<any>(null);
   const [historyFilter, setHistoryFilter] = useState<'month' | 'week' | 'all'>('month');
   const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Admin attendance history states
+  const [adminAttRecords, setAdminAttRecords] = useState<any[]>([]);
+  const [adminAttStats, setAdminAttStats] = useState<any>(null);
+  const [adminAttLoading, setAdminAttLoading] = useState(false);
+  const [adminAttFilter, setAdminAttFilter] = useState<'today' | 'week' | 'month' | 'custom' | 'all'>('today');
+  const [adminAttDateFrom, setAdminAttDateFrom] = useState('');
+  const [adminAttDateTo, setAdminAttDateTo] = useState('');
+  const [adminAttEmpFilter, setAdminAttEmpFilter] = useState('');
+  const [adminAttEmployees, setAdminAttEmployees] = useState<any[]>([]);
+  const [adminAttViewMode, setAdminAttViewMode] = useState<'list' | 'byDate'>('list');
 
   // Profile states
   const [profileData, setProfileData] = useState<any>(null);
@@ -150,6 +166,7 @@ export default function EmployeeDashboard() {
       fetchHistory('month');
       if ((session?.user as any)?.role === 'ADMIN') {
         fetchEmployees();
+        fetchAdminAttendance('today', '', '', '');
         setAdminPortalModalOpen(true);
       }
       // Pre-load face AI models in the background
@@ -184,6 +201,32 @@ export default function EmployeeDashboard() {
       console.error('Failed to fetch history', e);
     } finally {
       setHistoryLoading(false);
+    }
+  };
+
+  // Fetch ALL employees' attendance (admin only)
+  const fetchAdminAttendance = async (
+    filter: 'today' | 'week' | 'month' | 'custom' | 'all' = adminAttFilter,
+    dateFrom: string = adminAttDateFrom,
+    dateTo: string = adminAttDateTo,
+    empId: string = adminAttEmpFilter
+  ) => {
+    setAdminAttLoading(true);
+    try {
+      let url = `/api/admin/attendance?filter=${filter}`;
+      if (filter === 'custom' && dateFrom && dateTo) {
+        url += `&dateFrom=${dateFrom}&dateTo=${dateTo}`;
+      }
+      if (empId) url += `&employeeId=${empId}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      setAdminAttRecords(data.records || []);
+      setAdminAttStats(data.stats || null);
+      setAdminAttEmployees(data.employees || []);
+    } catch (e) {
+      console.error('Failed to fetch admin attendance', e);
+    } finally {
+      setAdminAttLoading(false);
     }
   };
 
@@ -727,7 +770,7 @@ export default function EmployeeDashboard() {
 
             <button
               className={`nav-item ${activeTab === 'history' ? 'active' : ''}`}
-              onClick={() => { setActiveTab('history'); setMobileMenuOpen(false); fetchHistory(); }}
+              onClick={() => { setActiveTab('history'); setMobileMenuOpen(false); fetchHistory(); if (isAdmin) fetchAdminAttendance(); }}
             >
               <History size={20} />
               <span>History</span>
@@ -1139,157 +1182,340 @@ export default function EmployeeDashboard() {
         {/* ══════════ TAB 2: HISTORY PAGE ══════════ */}
         {activeTab === 'history' && (
           <div>
-            <header className="flex justify-between items-center" style={{ marginBottom: '1.5rem' }}>
+            {/* ── ADMIN VIEW ──────────────────────────────────────── */}
+            {isAdmin ? (
               <div>
-                <h1 style={{ fontSize: '1.35rem', fontWeight: 700 }}>Attendance History</h1>
-                <p className="text-muted text-sm">View your attendance records and daily working hours</p>
-              </div>
-              <button
-                onClick={() => fetchHistory(historyFilter)}
-                className="btn-secondary flex items-center gap-1"
-                style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
-              >
-                <Clock size={16} />
-                <span>Refresh</span>
-              </button>
-            </header>
+                <header className="flex justify-between items-center" style={{ marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div>
+                    <h1 style={{ fontSize: '1.35rem', fontWeight: 700 }}>Staff Attendance History</h1>
+                    <p className="text-muted text-sm">Monitor login & logout records for all employees</p>
+                  </div>
+                  <button
+                    onClick={() => fetchAdminAttendance()}
+                    className="btn-secondary flex items-center gap-1"
+                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                  >
+                    <Clock size={16} />
+                    <span>Refresh</span>
+                  </button>
+                </header>
 
-            {/* Filter Tabs */}
-            <div className="flex gap-2" style={{ marginBottom: '1.5rem' }}>
-              <button
-                className={`btn-secondary ${historyFilter === 'month' ? 'active-filter' : ''}`}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '20px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  backgroundColor: historyFilter === 'month' ? 'var(--accent-gold)' : 'transparent',
-                  color: historyFilter === 'month' ? '#fff' : 'var(--text-muted)',
-                  borderColor: historyFilter === 'month' ? 'var(--accent-gold)' : 'var(--border-light)'
-                }}
-                onClick={() => handleFilterChange('month')}
-              >
-                This Month
-              </button>
+                {/* ── Date Filter Bar ── */}
+                <div className="card" style={{ padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem', alignItems: 'flex-end' }}>
+                    {/* Quick filter pills */}
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {(['today', 'week', 'month', 'all'] as const).map((f) => (
+                        <button
+                          key={f}
+                          style={{
+                            padding: '0.45rem 0.9rem',
+                            borderRadius: '20px',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            border: '1.5px solid',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            backgroundColor: adminAttFilter === f ? 'var(--accent-gold)' : 'transparent',
+                            color: adminAttFilter === f ? '#fff' : 'var(--text-muted)',
+                            borderColor: adminAttFilter === f ? 'var(--accent-gold)' : 'var(--border-light)',
+                          }}
+                          onClick={() => {
+                            setAdminAttFilter(f);
+                            fetchAdminAttendance(f, adminAttDateFrom, adminAttDateTo, adminAttEmpFilter);
+                          }}
+                        >
+                          {f === 'today' ? 'Today' : f === 'week' ? 'Last 7 Days' : f === 'month' ? 'This Month' : 'All Records'}
+                        </button>
+                      ))}
+                      <button
+                        style={{
+                          padding: '0.45rem 0.9rem',
+                          borderRadius: '20px',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          border: '1.5px solid',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          backgroundColor: adminAttFilter === 'custom' ? 'var(--accent-gold)' : 'transparent',
+                          color: adminAttFilter === 'custom' ? '#fff' : 'var(--text-muted)',
+                          borderColor: adminAttFilter === 'custom' ? 'var(--accent-gold)' : 'var(--border-light)',
+                        }}
+                        onClick={() => setAdminAttFilter('custom')}
+                      >
+                        📅 Custom Range
+                      </button>
+                    </div>
 
-              <button
-                className={`btn-secondary ${historyFilter === 'week' ? 'active-filter' : ''}`}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '20px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  backgroundColor: historyFilter === 'week' ? 'var(--accent-gold)' : 'transparent',
-                  color: historyFilter === 'week' ? '#fff' : 'var(--text-muted)',
-                  borderColor: historyFilter === 'week' ? 'var(--accent-gold)' : 'var(--border-light)'
-                }}
-                onClick={() => handleFilterChange('week')}
-              >
-                Last 7 Days
-              </button>
+                    {/* Custom date range pickers */}
+                    {adminAttFilter === 'custom' && (
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <input
+                          type="date"
+                          className="input-field"
+                          value={adminAttDateFrom}
+                          onChange={(e) => setAdminAttDateFrom(e.target.value)}
+                          style={{ width: '145px', padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                        />
+                        <span className="text-muted" style={{ fontSize: '0.85rem' }}>to</span>
+                        <input
+                          type="date"
+                          className="input-field"
+                          value={adminAttDateTo}
+                          onChange={(e) => setAdminAttDateTo(e.target.value)}
+                          style={{ width: '145px', padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                        />
+                        <button
+                          className="btn-primary"
+                          style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', width: 'auto' }}
+                          onClick={() => fetchAdminAttendance('custom', adminAttDateFrom, adminAttDateTo, adminAttEmpFilter)}
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    )}
 
-              <button
-                className={`btn-secondary ${historyFilter === 'all' ? 'active-filter' : ''}`}
-                style={{
-                  padding: '0.5rem 1rem',
-                  borderRadius: '20px',
-                  fontSize: '0.85rem',
-                  fontWeight: 600,
-                  backgroundColor: historyFilter === 'all' ? 'var(--accent-gold)' : 'transparent',
-                  color: historyFilter === 'all' ? '#fff' : 'var(--text-muted)',
-                  borderColor: historyFilter === 'all' ? 'var(--accent-gold)' : 'var(--border-light)'
-                }}
-                onClick={() => handleFilterChange('all')}
-              >
-                All Records
-              </button>
-            </div>
+                    {/* Employee filter dropdown */}
+                    <div style={{ marginLeft: 'auto' }}>
+                      <select
+                        className="input-field"
+                        value={adminAttEmpFilter}
+                        onChange={(e) => {
+                          setAdminAttEmpFilter(e.target.value);
+                          fetchAdminAttendance(adminAttFilter, adminAttDateFrom, adminAttDateTo, e.target.value);
+                        }}
+                        style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', minWidth: '170px' }}
+                      >
+                        <option value="">All Employees</option>
+                        {adminAttEmployees.map((emp: any) => (
+                          <option key={emp._id} value={emp._id}>{emp.name} ({emp.employeeId})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
 
-            {/* Summary Statistics */}
-            <div className="stat-grid">
-              <div className="stat-box">
-                <span className="stat-box-title">Total Days Logged</span>
-                <span className="stat-box-val">{historyStats?.totalRecords || historyRecords.length}</span>
-              </div>
-              <div className="stat-box">
-                <span className="stat-box-title">Total Hours Worked</span>
-                <span className="stat-box-val text-gold">{historyStats?.totalHoursStr || '0m'}</span>
-              </div>
-              <div className="stat-box">
-                <span className="stat-box-title">Late Check-ins</span>
-                <span className="stat-box-val" style={{ color: (historyStats?.lateDays || 0) > 0 ? 'var(--status-late)' : 'var(--text-main)' }}>
-                  {historyStats?.lateDays || 0}
-                </span>
-              </div>
-            </div>
+                {/* ── Summary Stats ── */}
+                <div className="stat-grid" style={{ marginBottom: '1.25rem' }}>
+                  <div className="stat-box">
+                    <span className="stat-box-title">Total Records</span>
+                    <span className="stat-box-val">{adminAttStats?.totalRecords || adminAttRecords.length}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-box-title" style={{ color: 'var(--status-present)' }}>Present / Logged</span>
+                    <span className="stat-box-val" style={{ color: 'var(--status-present)' }}>{adminAttStats?.presentCount || 0}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-box-title" style={{ color: 'var(--status-late)' }}>Late Check-ins</span>
+                    <span className="stat-box-val" style={{ color: 'var(--status-late)' }}>{adminAttStats?.lateCount || 0}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-box-title">Total Hours Worked</span>
+                    <span className="stat-box-val text-gold">{adminAttStats?.totalHoursStr || '0m'}</span>
+                  </div>
+                </div>
 
-            {/* Records List */}
-            {historyLoading ? (
-              <div className="card text-center" style={{ padding: '3rem' }}>
-                <Clock className="animate-spin text-gold" size={28} style={{ margin: '0 auto 0.5rem' }} />
-                <p className="text-muted">Loading attendance records...</p>
-              </div>
-            ) : historyRecords.length === 0 ? (
-              <div className="card text-center" style={{ padding: '3rem 1.5rem' }}>
-                <CalendarDays size={48} className="text-muted" style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
-                <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>No attendance records found</h3>
-                <p className="text-muted text-sm">There are no attendance check-ins recorded for this period.</p>
+                {/* ── Records ── */}
+                {adminAttLoading ? (
+                  <div className="card text-center" style={{ padding: '3rem' }}>
+                    <Clock className="animate-spin text-gold" size={28} style={{ margin: '0 auto 0.5rem' }} />
+                    <p className="text-muted">Loading attendance records...</p>
+                  </div>
+                ) : adminAttRecords.length === 0 ? (
+                  <div className="card text-center" style={{ padding: '3rem 1.5rem' }}>
+                    <CalendarDays size={48} className="text-muted" style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+                    <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>No attendance records found</h3>
+                    <p className="text-muted text-sm">No check-ins recorded for the selected period.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {adminAttRecords.map((record: any) => {
+                      const durationStr = calculateWorkingHours(record.checkInTime, record.checkOutTime);
+                      const emp = record.employee;
+                      return (
+                        <div key={record._id || record.date + record.userId} className="card" style={{ padding: '1.25rem', borderLeft: `4px solid ${record.status === 'PRESENT' ? 'var(--status-present)' : record.status === 'LATE' ? 'var(--status-late)' : 'var(--border-light)'}` }}>
+                          {/* Top row: employee info + date + status */}
+                          <div className="flex justify-between items-center" style={{ marginBottom: '0.9rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <div className="flex items-center gap-3">
+                              {/* Avatar */}
+                              <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: 'rgba(197, 160, 89, 0.18)', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '1rem', flexShrink: 0 }}>
+                                {emp?.name?.[0] || '?'}
+                              </div>
+                              <div>
+                                <p className="font-bold" style={{ fontSize: '0.95rem' }}>{emp?.name || 'Unknown Employee'}</p>
+                                <p className="text-muted" style={{ fontSize: '0.78rem' }}>
+                                  {emp?.employeeId || ''}{emp?.designation ? ` • ${emp.designation}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="flex items-center gap-1 text-muted" style={{ fontSize: '0.82rem' }}>
+                                <Calendar size={14} className="text-gold" />
+                                {formatDate(record.date)}
+                              </span>
+                              {record.status === 'PRESENT' && <span className="badge badge-present">PRESENT</span>}
+                              {record.status === 'LATE' && <span className="badge badge-late">LATE</span>}
+                              {record.status === 'ABSENT' && <span className="badge badge-absent">ABSENT</span>}
+                            </div>
+                          </div>
+
+                          {/* Login / Logout / Duration row */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', borderTop: '1px solid var(--border-light)', paddingTop: '0.9rem' }}>
+                            <div>
+                              <p className="text-muted" style={{ fontSize: '0.78rem', marginBottom: '0.2rem' }}>🟢 Login Time</p>
+                              <p className="font-bold" style={{ fontSize: '1.05rem', color: record.checkInTime ? 'var(--status-present)' : 'var(--text-muted)' }}>
+                                {formatTime(record.checkInTime)}
+                              </p>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                              <p className="text-muted" style={{ fontSize: '0.78rem', marginBottom: '0.2rem' }}>⏱ Duration</p>
+                              <p className="font-bold text-gold" style={{ fontSize: '1.05rem' }}>{durationStr}</p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <p className="text-muted" style={{ fontSize: '0.78rem', marginBottom: '0.2rem' }}>🔴 Logout Time</p>
+                              <p className="font-bold" style={{ fontSize: '1.05rem', color: record.checkOutTime ? 'var(--status-absent)' : 'var(--text-muted)' }}>
+                                {formatTime(record.checkOutTime)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* GPS row */}
+                          {record.distanceFromSalon !== undefined && (
+                            <div className="flex justify-between items-center" style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-light)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                              <span className="flex items-center gap-1">
+                                <MapPin size={12} className="text-gold" />
+                                GPS verified — {Math.round(record.distanceFromSalon)}m from salon
+                              </span>
+                              {!record.checkOutTime && record.checkInTime && (
+                                <span style={{ color: 'var(--status-late)', fontWeight: 600 }}>⚠ Not yet checked out</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
-                {historyRecords.map((record) => {
-                  const durationStr = calculateWorkingHours(record.checkInTime, record.checkOutTime);
-                  return (
-                    <div key={record._id || record.date} className="card" style={{ padding: '1.25rem' }}>
-                      <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem' }}>
-                        <div className="flex items-center gap-2">
-                          <Calendar size={18} className="text-gold" />
-                          <span className="font-bold" style={{ fontSize: '1rem' }}>{formatDate(record.date)}</span>
-                        </div>
-                        <div>
-                          {record.status === 'PRESENT' && (
-                            <span className="badge badge-present">PRESENT</span>
-                          )}
-                          {record.status === 'LATE' && (
-                            <span className="badge badge-late">LATE</span>
-                          )}
-                          {record.status === 'ABSENT' && (
-                            <span className="badge badge-absent">ABSENT</span>
-                          )}
-                        </div>
-                      </div>
+              /* ── EMPLOYEE (own) HISTORY VIEW ── */
+              <div>
+                <header className="flex justify-between items-center" style={{ marginBottom: '1.5rem' }}>
+                  <div>
+                    <h1 style={{ fontSize: '1.35rem', fontWeight: 700 }}>Attendance History</h1>
+                    <p className="text-muted text-sm">View your attendance records and daily working hours</p>
+                  </div>
+                  <button
+                    onClick={() => fetchHistory(historyFilter)}
+                    className="btn-secondary flex items-center gap-1"
+                    style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                  >
+                    <Clock size={16} />
+                    <span>Refresh</span>
+                  </button>
+                </header>
 
-                      <div className="flex justify-between items-center" style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem' }}>
-                        <div>
-                          <p className="text-muted text-sm">Check-in</p>
-                          <p className="font-bold">{formatTime(record.checkInTime)}</p>
-                        </div>
+                {/* Filter Tabs */}
+                <div className="flex gap-2" style={{ marginBottom: '1.5rem' }}>
+                  {(['month', 'week', 'all'] as const).map((f) => (
+                    <button
+                      key={f}
+                      className={`btn-secondary ${historyFilter === f ? 'active-filter' : ''}`}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        borderRadius: '20px',
+                        fontSize: '0.85rem',
+                        fontWeight: 600,
+                        backgroundColor: historyFilter === f ? 'var(--accent-gold)' : 'transparent',
+                        color: historyFilter === f ? '#fff' : 'var(--text-muted)',
+                        borderColor: historyFilter === f ? 'var(--accent-gold)' : 'var(--border-light)'
+                      }}
+                      onClick={() => handleFilterChange(f)}
+                    >
+                      {f === 'month' ? 'This Month' : f === 'week' ? 'Last 7 Days' : 'All Records'}
+                    </button>
+                  ))}
+                </div>
 
-                        <div className="text-center">
-                          <p className="text-muted text-sm">Duration</p>
-                          <p className="font-bold text-gold">{durationStr}</p>
-                        </div>
+                {/* Summary Statistics */}
+                <div className="stat-grid">
+                  <div className="stat-box">
+                    <span className="stat-box-title">Total Days Logged</span>
+                    <span className="stat-box-val">{historyStats?.totalRecords || historyRecords.length}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-box-title">Total Hours Worked</span>
+                    <span className="stat-box-val text-gold">{historyStats?.totalHoursStr || '0m'}</span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="stat-box-title">Late Check-ins</span>
+                    <span className="stat-box-val" style={{ color: (historyStats?.lateDays || 0) > 0 ? 'var(--status-late)' : 'var(--text-main)' }}>
+                      {historyStats?.lateDays || 0}
+                    </span>
+                  </div>
+                </div>
 
-                        <div style={{ textAlign: 'right' }}>
-                          <p className="text-muted text-sm">Check-out</p>
-                          <p className="font-bold">{formatTime(record.checkOutTime)}</p>
-                        </div>
-                      </div>
+                {/* Records List */}
+                {historyLoading ? (
+                  <div className="card text-center" style={{ padding: '3rem' }}>
+                    <Clock className="animate-spin text-gold" size={28} style={{ margin: '0 auto 0.5rem' }} />
+                    <p className="text-muted">Loading attendance records...</p>
+                  </div>
+                ) : historyRecords.length === 0 ? (
+                  <div className="card text-center" style={{ padding: '3rem 1.5rem' }}>
+                    <CalendarDays size={48} className="text-muted" style={{ margin: '0 auto 1rem', opacity: 0.5 }} />
+                    <h3 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>No attendance records found</h3>
+                    <p className="text-muted text-sm">There are no attendance check-ins recorded for this period.</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    {historyRecords.map((record) => {
+                      const durationStr = calculateWorkingHours(record.checkInTime, record.checkOutTime);
+                      return (
+                        <div key={record._id || record.date} className="card" style={{ padding: '1.25rem' }}>
+                          <div className="flex justify-between items-center" style={{ marginBottom: '0.75rem' }}>
+                            <div className="flex items-center gap-2">
+                              <Calendar size={18} className="text-gold" />
+                              <span className="font-bold" style={{ fontSize: '1rem' }}>{formatDate(record.date)}</span>
+                            </div>
+                            <div>
+                              {record.status === 'PRESENT' && (<span className="badge badge-present">PRESENT</span>)}
+                              {record.status === 'LATE' && (<span className="badge badge-late">LATE</span>)}
+                              {record.status === 'ABSENT' && (<span className="badge badge-absent">ABSENT</span>)}
+                            </div>
+                          </div>
 
-                      {record.distanceFromSalon !== undefined && (
-                        <div className="flex justify-between items-center" style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-light)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          <span className="flex items-center gap-1">
-                            <MapPin size={13} className="text-gold" />
-                            GPS verified ({Math.round(record.distanceFromSalon)}m from salon)
-                          </span>
-                          {record.gpsAccuracy && (
-                            <span>Accuracy: ±{Math.round(record.gpsAccuracy)}m</span>
+                          <div className="flex justify-between items-center" style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.75rem' }}>
+                            <div>
+                              <p className="text-muted text-sm">🟢 Login</p>
+                              <p className="font-bold">{formatTime(record.checkInTime)}</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-muted text-sm">Duration</p>
+                              <p className="font-bold text-gold">{durationStr}</p>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <p className="text-muted text-sm">🔴 Logout</p>
+                              <p className="font-bold">{formatTime(record.checkOutTime)}</p>
+                            </div>
+                          </div>
+
+                          {record.distanceFromSalon !== undefined && (
+                            <div className="flex justify-between items-center" style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-light)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                              <span className="flex items-center gap-1">
+                                <MapPin size={13} className="text-gold" />
+                                GPS verified ({Math.round(record.distanceFromSalon)}m from salon)
+                              </span>
+                              {record.gpsAccuracy && (
+                                <span>Accuracy: ±{Math.round(record.gpsAccuracy)}m</span>
+                              )}
+                            </div>
                           )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
