@@ -45,3 +45,5 @@ attendance.db
 
 # face-api AI model weights (binary files, downloaded via postinstall)
 /public/models/
+.vercel
+.env*

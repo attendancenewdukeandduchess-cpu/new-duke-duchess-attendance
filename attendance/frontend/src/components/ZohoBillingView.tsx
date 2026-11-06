@@ -66,7 +66,8 @@ export default function ZohoBillingView() {
     customersCount: 86
   });
 
-  const [invoices, setInvoices] = useState([
+  // ── Default seed data (used when localStorage is empty) ──────────────────
+  const DEFAULT_INVOICES = [
     { id: 'INV-00104', customer: 'Ananya Sharma',    phone: '+91 98765 43210', service: 'Hair Coloring & Spa',              date: '2026-11-03', amount: 4500,  gst: 18, discount: 0,   status: 'PAID',   mode: 'UPI'  },
     { id: 'INV-00103', customer: 'Vikramaditya Roy', phone: '+91 98123 45678', service: 'Royal Grooming Package',           date: '2026-11-03', amount: 2800,  gst: 18, discount: 10,  status: 'PAID',   mode: 'CARD' },
     { id: 'INV-00102', customer: 'Priya Sundaram',   phone: '+91 97654 32109', service: 'Keratin Hair Treatment',           date: '2026-11-02', amount: 6500,  gst: 18, discount: 0,   status: 'UNPAID', mode: 'PENDING' },
@@ -82,13 +83,21 @@ export default function ZohoBillingView() {
     { id: 'INV-00092', customer: 'Nisha Babu',       phone: '+91 90909 08070', service: 'Rebonding + Colour',               date: '2026-10-28', amount: 11999, gst: 18, discount: 15,  status: 'PAID',   mode: 'UPI'  },
     { id: 'INV-00091', customer: 'Ajith Kumar',      phone: '+91 88877 66554', service: 'Signature Haircut + Beard Combo',  date: '2026-10-28', amount: 999,   gst: 0,  discount: 0,   status: 'PAID',   mode: 'CASH' },
     { id: 'INV-00090', customer: 'Saritha Nambiar',  phone: '+91 97700 55443', service: 'Master Pro Glow Facial',           date: '2026-10-27', amount: 5999,  gst: 18, discount: 0,   status: 'UNPAID', mode: 'PENDING' },
-  ]);
+  ];
 
-  const [customers, setCustomers] = useState([
-    { id: 'CUST-001', name: 'Ananya Sharma', phone: '+91 98765 43210', email: 'ananya@example.com', visits: 14, balance: 0, tag: 'VIP Member' },
-    { id: 'CUST-002', name: 'Vikramaditya Roy', phone: '+91 98123 45678', email: 'vikram@example.com', visits: 8, balance: 0, tag: 'Regular' },
-    { id: 'CUST-003', name: 'Priya Sundaram', phone: '+91 97654 32109', email: 'priya@example.com', visits: 5, balance: 6500, tag: 'Premium' },
-  ]);
+  const ls = <T,>(key: string, fallback: T): T => {
+    if (typeof window === 'undefined') return fallback;
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+  };
+
+  const [invoices, setInvoices] = useState<typeof DEFAULT_INVOICES>(() => ls('nd_invoices', DEFAULT_INVOICES));
+
+  const DEFAULT_CUSTOMERS = [
+    { id: 'CUST-001', name: 'Ananya Sharma',     phone: '+91 98765 43210', email: 'ananya@example.com', visits: 14, balance: 0, tag: 'VIP Member' },
+    { id: 'CUST-002', name: 'Vikramaditya Roy',  phone: '+91 98123 45678', email: 'vikram@example.com', visits: 8,  balance: 0, tag: 'Regular'    },
+    { id: 'CUST-003', name: 'Priya Sundaram',    phone: '+91 97654 32109', email: 'priya@example.com',  visits: 5,  balance: 6500, tag: 'Premium' },
+  ];
+  const [customers, setCustomers] = useState<typeof DEFAULT_CUSTOMERS>(() => ls('nd_customers', DEFAULT_CUSTOMERS));
 
   // ── Add Customer Modal state
   const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -626,6 +635,10 @@ export default function ZohoBillingView() {
       setPhoneLookupStatus('idle'); setPhoneLookupMsg('');
     }, 2500);
   };
+
+  // ── LocalStorage sync — persists data across page refreshes ─────────────
+  useEffect(() => { localStorage.setItem('nd_customers', JSON.stringify(customers)); }, [customers]);
+  useEffect(() => { localStorage.setItem('nd_invoices',  JSON.stringify(invoices));  }, [invoices]);
 
   // ── Client-only mount guard (prevents hydration mismatch) ──────────────
   const [mounted, setMounted] = useState(false);
