@@ -1,6 +1,7 @@
 import { MongoClient } from 'mongodb';
 
-const uri = process.env.MONGODB_URI!;
+// Use a SEPARATE env variable for billing so MONGODB_URI (attendance) is untouched
+const uri = process.env.MONGODB_BILLING_URI || process.env.MONGODB_URI!;
 const dbName = 'duke-duchess-billing';
 
 let client: MongoClient;
@@ -8,19 +9,19 @@ let clientPromise: Promise<MongoClient>;
 
 declare global {
   // eslint-disable-next-line no-var
-  var _mongoClientPromise: Promise<MongoClient> | undefined;
+  var _mongoBillingClientPromise: Promise<MongoClient> | undefined;
 }
 
 if (!uri) {
-  throw new Error('Please add MONGODB_URI to your .env file');
+  throw new Error('Please add MONGODB_BILLING_URI to your environment variables');
 }
 
 if (process.env.NODE_ENV === 'development') {
-  if (!global._mongoClientPromise) {
+  if (!global._mongoBillingClientPromise) {
     client = new MongoClient(uri);
-    global._mongoClientPromise = client.connect();
+    global._mongoBillingClientPromise = client.connect();
   }
-  clientPromise = global._mongoClientPromise;
+  clientPromise = global._mongoBillingClientPromise;
 } else {
   client = new MongoClient(uri);
   clientPromise = client.connect();
