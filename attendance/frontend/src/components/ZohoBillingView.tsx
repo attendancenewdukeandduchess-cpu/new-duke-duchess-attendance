@@ -66,7 +66,10 @@ export default function ZohoBillingView() {
     customersCount: 86
   });
 
-  // ── Default seed data (used when localStorage is empty) ──────────────────
+  // ── Loading state ────────────────────────────────────────────────────────
+  const [dbLoading, setDbLoading] = useState(true);
+
+  // ── Default seed data (shown while DB loads / on first use) ──────────────
   const DEFAULT_INVOICES = [
     { id: 'INV-00104', customer: 'Ananya Sharma',    phone: '+91 98765 43210', service: 'Hair Coloring & Spa',              date: '2026-11-03', amount: 4500,  gst: 18, discount: 0,   status: 'PAID',   mode: 'UPI'  },
     { id: 'INV-00103', customer: 'Vikramaditya Roy', phone: '+91 98123 45678', service: 'Royal Grooming Package',           date: '2026-11-03', amount: 2800,  gst: 18, discount: 10,  status: 'PAID',   mode: 'CARD' },
@@ -85,19 +88,14 @@ export default function ZohoBillingView() {
     { id: 'INV-00090', customer: 'Saritha Nambiar',  phone: '+91 97700 55443', service: 'Master Pro Glow Facial',           date: '2026-10-27', amount: 5999,  gst: 18, discount: 0,   status: 'UNPAID', mode: 'PENDING' },
   ];
 
-  const ls = <T,>(key: string, fallback: T): T => {
-    if (typeof window === 'undefined') return fallback;
-    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
-  };
-
-  const [invoices, setInvoices] = useState<typeof DEFAULT_INVOICES>(() => ls('nd_invoices', DEFAULT_INVOICES));
+  const [invoices, setInvoices] = useState<typeof DEFAULT_INVOICES>(DEFAULT_INVOICES);
 
   const DEFAULT_CUSTOMERS = [
     { id: 'CUST-001', name: 'Ananya Sharma',     phone: '+91 98765 43210', email: 'ananya@example.com', visits: 14, balance: 0, tag: 'VIP Member' },
     { id: 'CUST-002', name: 'Vikramaditya Roy',  phone: '+91 98123 45678', email: 'vikram@example.com', visits: 8,  balance: 0, tag: 'Regular'    },
     { id: 'CUST-003', name: 'Priya Sundaram',    phone: '+91 97654 32109', email: 'priya@example.com',  visits: 5,  balance: 6500, tag: 'Premium' },
   ];
-  const [customers, setCustomers] = useState<typeof DEFAULT_CUSTOMERS>(() => ls('nd_customers', DEFAULT_CUSTOMERS));
+  const [customers, setCustomers] = useState<typeof DEFAULT_CUSTOMERS>(DEFAULT_CUSTOMERS);
 
   // ── Add Customer Modal state
   const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -518,10 +516,13 @@ export default function ZohoBillingView() {
   };
 
   // ── Add Customer handler
-  const handleAddCustomer = () => {
+  const handleAddCustomer = async () => {
     if (!newCustName.trim() || !newCustPhone.trim()) return;
     const newId = `CUST-${String(customers.length + 1).padStart(3, '0')}`;
-    setCustomers(prev => [{ id: newId, name: newCustName.trim(), phone: newCustPhone.trim(), email: newCustEmail.trim(), visits: 0, balance: 0, tag: newCustTag }, ...prev]);
+    const newCust = { id: newId, name: newCustName.trim(), phone: newCustPhone.trim(), email: newCustEmail.trim(), visits: 0, balance: 0, tag: newCustTag };
+    setCustomers(prev => [newCust, ...prev]);
+    // Save to MongoDB
+    fetch('/api/billing/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCust) });
     setNewCustName(''); setNewCustPhone(''); setNewCustEmail(''); setNewCustTag('Regular');
     setShowAddCustomer(false);
   };
@@ -610,9 +611,21 @@ export default function ZohoBillingView() {
     const customerName = posCustomer || 'Walk-in Client';
     if (phoneLookupStatus === 'new' && posPhone.trim() && customerName !== 'Walk-in Client') {
       const newId = `CUST-${String(customers.length + 1).padStart(3, '0')}`;
-      setCustomers(prev => [...prev, { id: newId, name: customerName, phone: posPhone.trim(), email: '', visits: 1, balance: 0, tag: 'Regular' }]);
+      const newCust = { id: newId, name: customerName, phone: posPhone.trim(), email: '', visits: 1, balance: 0, tag: 'Regular' };
+      setCustomers(prev => [...prev, newCust]);
+      // Save new customer to MongoDB
+      fetch('/api/billing/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCust) });
     } else if (phoneLookupStatus === 'found' && posPhone.trim()) {
-      setCustomers(prev => prev.map(c => c.phone.replace(/\s+/g, '').includes(posPhone.replace(/\s+/g, '')) ? { ...c, visits: c.visits + 1 } : c));
+      const normalized = posPhone.replace(/\s+/g, '');
+      setCustomers(prev => prev.map(c => {
+        if (c.phone.replace(/\s+/g, '').includes(normalized)) {
+          const updated = { ...c, visits: c.visits + 1 };
+          // Update visit count in MongoDB
+          fetch(`/api/billing/customers/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visits: updated.visits }) });
+          return updated;
+        }
+        return c;
+      }));
     }
     const newInv = {
       id: `INV-00${invoices.length + 105}`,
@@ -627,6 +640,8 @@ export default function ZohoBillingView() {
       mode: posPayMode
     };
     setInvoices(prev => [newInv, ...prev]);
+    // Save invoice to MongoDB
+    fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
     setBillSuccess(true);
     setTimeout(() => {
       setBillSuccess(false); setCartItems([]);
@@ -636,9 +651,39 @@ export default function ZohoBillingView() {
     }, 2500);
   };
 
-  // ── LocalStorage sync — persists data across page refreshes ─────────────
-  useEffect(() => { localStorage.setItem('nd_customers', JSON.stringify(customers)); }, [customers]);
-  useEffect(() => { localStorage.setItem('nd_invoices',  JSON.stringify(invoices));  }, [invoices]);
+  // ── MongoDB: load data on mount ──────────────────────────────────────────
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [custRes, invRes] = await Promise.all([
+          fetch('/api/billing/customers'),
+          fetch('/api/billing/invoices'),
+        ]);
+        const custData = await custRes.json();
+        const invData  = await invRes.json();
+        if (Array.isArray(custData) && custData.length > 0) setCustomers(custData);
+        else {
+          // Seed default customers on first use
+          await Promise.all(DEFAULT_CUSTOMERS.map(c =>
+            fetch('/api/billing/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(c) })
+          ));
+        }
+        if (Array.isArray(invData) && invData.length > 0) setInvoices(invData);
+        else {
+          // Seed default invoices on first use
+          await Promise.all(DEFAULT_INVOICES.map(inv =>
+            fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inv) })
+          ));
+        }
+      } catch (err) {
+        console.error('Failed to load billing data from MongoDB:', err);
+      } finally {
+        setDbLoading(false);
+      }
+    }
+    loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Client-only mount guard (prevents hydration mismatch) ──────────────
   const [mounted, setMounted] = useState(false);

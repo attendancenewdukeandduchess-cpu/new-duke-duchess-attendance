@@ -9,11 +9,11 @@
     "lint": "eslint",
     "postinstall": "node download-models.js"
   },
-
   "dependencies": {
     "@vladmandic/face-api": "^1.7.15",
     "bcryptjs": "^3.0.3",
     "lucide-react": "^1.43.0",
+    "mongodb": "^7.9.0",
     "mongoose": "^9.9.5",
     "next": "16.3.4",
     "next-auth": "^4.24.15",
