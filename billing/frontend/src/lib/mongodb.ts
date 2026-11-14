@@ -1,7 +1,6 @@
 import { MongoClient } from 'mongodb';
 
-// Use a SEPARATE env variable for billing so MONGODB_URI (attendance) is untouched
-const uri = process.env.MONGODB_BILLING_URI || process.env.MONGODB_URI!;
+const uri = process.env.MONGODB_URI!;
 const dbName = 'duke-duchess-billing';
 
 let client: MongoClient;
@@ -13,7 +12,7 @@ declare global {
 }
 
 if (!uri) {
-  throw new Error('Please add MONGODB_BILLING_URI to your environment variables');
+  throw new Error('Please add MONGODB_URI to your environment variables');
 }
 
 if (process.env.NODE_ENV === 'development') {

@@ -522,6 +522,8 @@ export default function DukeDuchessBillingApp() {
       tag: newCustTag
     };
     setCustomers(prev => [newCust, ...prev]);
+    // Save to MongoDB
+    fetch('/api/billing/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCust) });
     setNewCustName(''); setNewCustPhone(''); setNewCustEmail(''); setNewCustTag('Regular');
     setShowAddCustomer(false);
   };
@@ -563,6 +565,8 @@ export default function DukeDuchessBillingApp() {
       mode: invPayMode
     };
     setInvoices([newInv, ...invoices]);
+    // Save to MongoDB
+    fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
     setNewInvoiceModal(false);
     setInvCustomer('');
     alert(`✅ Invoice ${newInv.id} successfully created and marked as PAID!`);
@@ -612,16 +616,21 @@ export default function DukeDuchessBillingApp() {
     // Auto-add new customer if phone was searched and no existing match found
     if (phoneLookupStatus === 'new' && posPhone.trim() && customerName !== 'Walk-in Client') {
       const newId = `CUST-${String(customers.length + 1).padStart(3, '0')}`;
-      setCustomers(prev => [...prev, {
-        id: newId, name: customerName, phone: posPhone.trim(),
-        email: '', visits: 1, balance: 0, tag: 'Regular'
-      }]);
+      const newCust = { id: newId, name: customerName, phone: posPhone.trim(), email: '', visits: 1, balance: 0, tag: 'Regular' };
+      setCustomers(prev => [...prev, newCust]);
+      // Save new customer to MongoDB
+      fetch('/api/billing/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCust) });
     } else if (phoneLookupStatus === 'found' && posPhone.trim()) {
       // Increment visit count for existing customer
-      setCustomers(prev => prev.map(c =>
-        c.phone.replace(/\s+/g, '').includes(posPhone.replace(/\s+/g, ''))
-          ? { ...c, visits: c.visits + 1 } : c
-      ));
+      const normalized = posPhone.replace(/\s+/g, '');
+      setCustomers(prev => prev.map(c => {
+        if (c.phone.replace(/\s+/g, '').includes(normalized)) {
+          const updated = { ...c, visits: c.visits + 1 };
+          fetch(`/api/billing/customers/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visits: updated.visits }) });
+          return updated;
+        }
+        return c;
+      }));
     }
 
     const newInv = {
@@ -637,6 +646,8 @@ export default function DukeDuchessBillingApp() {
       mode: posPayMode
     };
     setInvoices(prev => [newInv, ...prev]);
+    // Save invoice to MongoDB
+    fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
     setBillSuccess(true);
     setTimeout(() => {
       setBillSuccess(false);
@@ -646,6 +657,25 @@ export default function DukeDuchessBillingApp() {
       setPhoneLookupStatus('idle'); setPhoneLookupMsg('');
     }, 2500);
   };
+
+  // ── MongoDB: load data on mount ──────────────────────────────────────────
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [custRes, invRes] = await Promise.all([
+          fetch('/api/billing/customers'),
+          fetch('/api/billing/invoices'),
+        ]);
+        const custData = await custRes.json();
+        const invData  = await invRes.json();
+        if (Array.isArray(custData) && custData.length > 0) setCustomers(custData);
+        if (Array.isArray(invData) && invData.length > 0) setInvoices(invData);
+      } catch (err) {
+        console.error('Failed to load billing data from MongoDB:', err);
+      }
+    }
+    loadData();
+  }, []);
 
   // ── Client-only mount guard (prevents hydration mismatch) ──────────────
   const [mounted, setMounted] = useState(false);
