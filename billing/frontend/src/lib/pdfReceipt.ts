@@ -117,19 +117,27 @@ export function formatReceiptDateTime(dateStr?: string) {
   }
 }
 
+/**
+ * Creates a pixel-perfect, professionally aligned vector PDF invoice
+ * matching the New Duke & Duchess luxury salon brand aesthetics.
+ * Strictly under 30KB (< 50KB guarantee).
+ */
 export function createInvoicePdfDoc(inv: Invoice): jsPDF {
+  const fin = computeInvoiceFinancials(inv);
+  const dateTimeStr = formatReceiptDateTime(inv.date);
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
     format: 'a4'
   });
 
-  const fin = computeInvoiceFinancials(inv);
-  const dateTimeStr = formatReceiptDateTime(inv.date);
-  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageWidth = 210;
+  const margin = 14;
+  const contentWidth = pageWidth - (margin * 2); // 182mm
   let y = 10;
 
-  // 1. Logo
+  // 1. Logo (Centered)
   if (SALON_LOGO_DATA_URI) {
     const logoW = 24;
     const logoH = 26;
@@ -139,107 +147,116 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
 
   // 2. Salon Title
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
+  doc.setFontSize(17);
   doc.setTextColor(17, 17, 17);
   doc.text('NEW DUKE & DUCHESS', pageWidth / 2, y, { align: 'center' });
   y += 5;
 
-  // 3. Unisex Salon Tagline
+  // 3. Unisex Salon Tagline with Gold Decorative Lines
   doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
   doc.setTextColor(184, 151, 61); // #b8973d
-  doc.text('—  UNISEX SALON  —', pageWidth / 2, y, { align: 'center' });
+  doc.text('UNISEX SALON', pageWidth / 2, y, { align: 'center' });
+  // decorative lines
+  doc.setDrawColor(184, 151, 61);
+  doc.setLineWidth(0.3);
+  doc.line(pageWidth / 2 - 38, y - 0.8, pageWidth / 2 - 16, y - 0.8);
+  doc.line(pageWidth / 2 + 16, y - 0.8, pageWidth / 2 + 38, y - 0.8);
   y += 5;
 
   // 4. Address & Phone
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.setTextColor(75, 85, 99); // #4b5563
+  doc.setTextColor(75, 85, 99);
   doc.text('1st Floor, Abhiman Arcade, Muddenapalya, Main Rd, near Ayodhya Samrat Hotel,', pageWidth / 2, y, { align: 'center' });
-  y += 4;
+  y += 3.8;
   doc.text('Srigandada Kaval, Nagarbhavi, Bengaluru, Karnataka 560072', pageWidth / 2, y, { align: 'center' });
   y += 4;
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(17, 17, 17);
   doc.text('Contact: +91 88610 22242', pageWidth / 2, y, { align: 'center' });
-  y += 7;
+  y += 6;
 
-  // 5. 2-Column Box: Invoice Details & Bill To
-  const boxX = 14;
-  const boxW = pageWidth - 28;
-  const boxH = 24;
+  // Horizontal Divider Line across width
+  doc.setDrawColor(220, 215, 200);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y, margin + contentWidth, y);
+  y += 3;
 
-  // Background & Borders
-  doc.setFillColor(252, 252, 251);
-  doc.setDrawColor(232, 227, 213);
-  doc.rect(boxX, y, boxW, boxH, 'FD');
+  // 5. 2-COLUMN BOX: INVOICE DETAILS & BILL TO (Perfect vertical colon alignment)
+  const boxTop = y;
+  const colWidth = (contentWidth - 6) / 2; // ~88mm
+  const col1Left = margin;
+  const col2Left = margin + colWidth + 6;
 
-  // Gold accent top bar
-  doc.setFillColor(184, 151, 61);
-  doc.rect(boxX, y, boxW, 1.2, 'F');
-
-  // Left Column: Invoice Details
-  const col1X = boxX + 5;
-  let colY = y + 5;
+  // Left Column: INVOICE DETAILS
+  let leftY = boxTop + 4;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(8.5);
   doc.setTextColor(184, 151, 61);
-  doc.text('INVOICE DETAILS', col1X, colY);
-  colY += 4.2;
+  doc.text('INVOICE DETAILS', col1Left, leftY);
+  leftY += 5;
 
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(80, 80, 80);
-  doc.text('Invoice No.     :', col1X, colY);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(17, 17, 17);
-  doc.text(inv.id || 'INV-0001', col1X + 24, colY);
-  colY += 4;
+  const leftLabels = [
+    { label: 'Invoice No.', val: inv.id || 'INV-0001' },
+    { label: 'Date & Time', val: dateTimeStr },
+    { label: 'Payment Mode', val: (inv.mode || 'CASH').toUpperCase() }
+  ];
 
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(80, 80, 80);
-  doc.text('Date & Time   :', col1X, colY);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(17, 17, 17);
-  doc.text(dateTimeStr, col1X + 24, colY);
-  colY += 4;
+  leftLabels.forEach(row => {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(90, 90, 90);
+    doc.text(row.label, col1Left, leftY);
+    // Fixed aligned colon at x = col1Left + 25
+    doc.text(':', col1Left + 25, leftY);
+    // Value in bold at x = col1Left + 28
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(17, 17, 17);
+    doc.text(row.val, col1Left + 28, leftY);
+    leftY += 4.5;
+  });
 
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(80, 80, 80);
-  doc.text('Payment Mode :', col1X, colY);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(17, 17, 17);
-  doc.text((inv.mode || 'CASH').toUpperCase() + ' (PAID)', col1X + 24, colY);
+  // Vertical Divider Line between Column 1 & Column 2
+  doc.setDrawColor(225, 220, 205);
+  doc.setLineWidth(0.4);
+  doc.line(col1Left + colWidth + 3, boxTop + 1, col1Left + colWidth + 3, leftY);
 
-  // Right Column: Bill To
-  const col2X = boxX + (boxW / 2) + 5;
-  colY = y + 5;
+  // Right Column: BILL TO
+  let rightY = boxTop + 4;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
+  doc.setFontSize(8.5);
   doc.setTextColor(184, 151, 61);
-  doc.text('BILL TO', col2X, colY);
-  colY += 4.5;
+  doc.text('BILL TO', col2Left, rightY);
+  rightY += 5;
 
-  doc.setFontSize(9.5);
   doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
   doc.setTextColor(17, 17, 17);
-  doc.text(inv.customer || 'Walk-in Client', col2X, colY);
-  colY += 4.5;
+  doc.text(inv.customer || 'Walk-in Client', col2Left, rightY);
+  rightY += 4.5;
 
-  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(75, 85, 99);
-  doc.text('Mobile: ' + (inv.phone || 'N/A'), col2X, colY);
+  doc.setFontSize(8);
+  doc.setTextColor(90, 90, 90);
+  doc.text('Mobile: ' + (inv.phone || 'N/A'), col2Left, rightY);
 
-  y += boxH + 6;
+  y = Math.max(leftY, rightY) + 3;
+
+  // Horizontal Divider Line below details box
+  doc.setDrawColor(220, 215, 200);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y, margin + contentWidth, y);
+  y += 5;
 
   // 6. Section Header
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(8.5);
   doc.setTextColor(184, 151, 61);
-  doc.text('SERVICES & PRODUCTS', 14, y);
+  doc.text('SERVICES', margin, y);
   y += 2.5;
 
-  // 7. Table of Items
+  // 7. Services Table
   const itemsList: InvoiceItem[] = (inv.items && inv.items.length > 0)
     ? inv.items
     : (inv.service || 'Salon Service').split(', ').map(s => {
@@ -263,111 +280,185 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
 
   autoTable(doc, {
     startY: y,
-    margin: { left: 14, right: 14 },
-    head: [['DESCRIPTION', 'STYLIST', 'QTY', 'RATE (₹)', 'AMOUNT (₹)']],
+    margin: { left: margin, right: margin },
+    head: [['DESCRIPTION', 'STYLIST', 'QTY', 'RATE (Rs.)', 'AMOUNT (Rs.)']],
     body: tableData,
-    theme: 'grid',
+    theme: 'plain',
     headStyles: {
       fillColor: [17, 17, 17],
       textColor: [184, 151, 61],
-      fontSize: 7.5,
+      fontSize: 8,
       fontStyle: 'bold',
       halign: 'left',
-      cellPadding: 2
+      cellPadding: 2.8
     },
     columnStyles: {
       0: { halign: 'left', cellWidth: 'auto' },
-      1: { halign: 'center', cellWidth: 24 },
-      2: { halign: 'center', cellWidth: 16 },
+      1: { halign: 'center', cellWidth: 26 },
+      2: { halign: 'center', cellWidth: 18 },
       3: { halign: 'right', cellWidth: 28 },
       4: { halign: 'right', cellWidth: 32, fontStyle: 'bold' }
     },
     bodyStyles: {
       fontSize: 8,
-      cellPadding: 2.2,
+      cellPadding: 2.8,
       textColor: [17, 17, 17]
     },
-    alternateRowStyles: {
-      fillColor: [250, 250, 250]
+    didDrawCell: function (data) {
+      if (data.section === 'body') {
+        doc.setDrawColor(240, 240, 240);
+        doc.setLineWidth(0.2);
+        doc.line(data.cell.x, data.cell.y + data.cell.height, data.cell.x + data.cell.width, data.cell.y + data.cell.height);
+      }
     }
   });
 
   const finalTableY = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY : y + 30;
   y = finalTableY + 4;
 
-  // 8. Totals Breakdown (Right-Aligned)
-  const totalBoxW = 75;
-  const totalBoxX = pageWidth - 14 - totalBoxW;
+  // 8. TOTALS SUMMARY TABLE (Right-Aligned, matching table's right margin)
+  const totalsBoxWidth = 85;
+  const totalsBoxX = margin + contentWidth - totalsBoxWidth;
 
-  const drawRow = (label: string, val: string, isBold = false, color = [17, 17, 17]) => {
-    doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(color[0], color[1], color[2]);
-    doc.text(label, totalBoxX, y);
-    doc.text(val, totalBoxX + totalBoxW, y, { align: 'right' });
-    y += 4.2;
-  };
-
-  drawRow('Subtotal:', '₹' + fin.grossSubtotal.toFixed(2));
+  const totalsRows: [string, string][] = [
+    ['Subtotal', 'Rs. ' + fin.grossSubtotal.toFixed(2)]
+  ];
 
   if (fin.discountAmt > 0) {
-    const discLabel = `Discount ${fin.discountPercent > 0 ? `(${fin.discountPercent}%)` : ''}:`;
-    drawRow(discLabel, '- ₹' + fin.discountAmt.toFixed(2), false, [16, 185, 129]);
-    drawRow('Taxable Amount:', '₹' + fin.taxableAmt.toFixed(2));
+    const discLabel = `Discount ${fin.discountPercent > 0 ? `(${fin.discountPercent}%)` : ''}`;
+    totalsRows.push([discLabel, '- Rs. ' + fin.discountAmt.toFixed(2)]);
+    totalsRows.push(['Taxable Amount', 'Rs. ' + fin.taxableAmt.toFixed(2)]);
   }
 
   if (fin.gstRate > 0 && fin.taxAmt > 0) {
-    drawRow(`CGST (${fin.cgstRate}%):`, '₹' + fin.cgstAmt.toFixed(2));
-    drawRow(`SGST (${fin.sgstRate}%):`, '₹' + fin.sgstAmt.toFixed(2));
+    totalsRows.push([`CGST (${fin.cgstRate}%)`, 'Rs. ' + fin.cgstAmt.toFixed(2)]);
+    totalsRows.push([`SGST (${fin.sgstRate}%)`, 'Rs. ' + fin.sgstAmt.toFixed(2)]);
   } else if (fin.taxAmt > 0) {
-    drawRow('Tax (GST):', '₹' + fin.taxAmt.toFixed(2));
+    totalsRows.push(['Tax (GST)', 'Rs. ' + fin.taxAmt.toFixed(2)]);
   }
 
-  // Divider
-  doc.setDrawColor(200, 200, 200);
-  doc.line(totalBoxX, y, totalBoxX + totalBoxW, y);
-  y += 4.5;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: totalsBoxX, right: margin },
+    body: totalsRows,
+    theme: 'plain',
+    tableWidth: totalsBoxWidth,
+    columnStyles: {
+      0: { halign: 'left', cellWidth: 48, fontSize: 8, textColor: [80, 80, 80] },
+      1: { halign: 'right', cellWidth: 37, fontSize: 8, fontStyle: 'bold', textColor: [17, 17, 17] }
+    },
+    bodyStyles: {
+      cellPadding: 1.6
+    },
+    didDrawCell: function(data) {
+      if (data.row.raw && String(data.row.raw[0]).startsWith('Discount')) {
+        doc.setTextColor(16, 185, 129);
+      }
+    }
+  });
 
-  // Total Paid
+  y = (doc as any).lastAutoTable ? (doc as any).lastAutoTable.finalY + 1.5 : y + 20;
+
+  // TOTAL PAYABLE ROW - SOLID BLACK BAR WITH LUXURY GOLD TEXT
+  doc.setFillColor(17, 17, 17);
+  doc.rect(totalsBoxX, y, totalsBoxWidth, 9, 'F');
+
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
-  doc.setTextColor(17, 17, 17);
-  doc.text('TOTAL PAID:', totalBoxX, y);
+  doc.setFontSize(8.5);
   doc.setTextColor(184, 151, 61);
-  doc.text('₹' + Number(inv.amount || fin.totalPayable).toFixed(2), totalBoxX + totalBoxW, y, { align: 'right' });
-  y += 5.5;
+  doc.text('TOTAL PAYABLE', totalsBoxX + 4, y + 6);
 
-  // Payment Status Pill
-  doc.setFillColor(236, 253, 245);
-  doc.setDrawColor(16, 185, 129);
-  doc.roundedRect(totalBoxX + totalBoxW - 35, y - 3.5, 35, 5, 1, 1, 'FD');
-  doc.setFontSize(7);
+  doc.setFontSize(11);
+  doc.text('Rs. ' + Number(inv.amount || fin.totalPayable).toFixed(2), totalsBoxX + totalsBoxWidth - 4, y + 6.3, { align: 'right' });
+
+  y += 14;
+
+  // 9. PAYMENT SUCCESSFUL FULL-WIDTH BANNER
+  doc.setFillColor(255, 252, 244); // light gold cream
+  doc.setDrawColor(212, 175, 55); // #d4af37
+  doc.setLineWidth(0.4);
+  doc.roundedRect(margin, y, contentWidth, 8.5, 1.5, 1.5, 'FD');
+
+  // Checkmark circle in gold
+  doc.setFillColor(184, 151, 61);
+  doc.circle(margin + 6, y + 4.25, 2.5, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(16, 185, 129);
-  doc.text('PAID SUCCESSFUL', totalBoxX + totalBoxW - 17.5, y, { align: 'center' });
+  doc.setFontSize(6.5);
+  doc.setTextColor(255, 255, 255);
+  doc.text('OK', margin + 6, y + 5.1, { align: 'center' });
 
-  y += 12;
-
-  // 9. Footer
-  doc.setDrawColor(230, 230, 230);
-  doc.line(14, y, pageWidth - 14, y);
-  y += 5;
+  // Banner text
+  doc.setFontSize(8);
+  doc.setTextColor(30, 30, 30);
+  doc.text('PAYMENT SUCCESSFUL', margin + 11, y + 5.3);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
-  doc.text('Thank you for visiting the New Duke & Duchess family! ❤️', pageWidth / 2, y, { align: 'center' });
-  y += 4;
-  doc.text('We truly appreciate your support and look forward to seeing you again! ⭐', pageWidth / 2, y, { align: 'center' });
-  y += 4;
-  doc.setFont('helvetica', 'italic');
-  doc.setTextColor(184, 151, 61);
-  doc.text('♥ Style is a reflection of your attitude ♥', pageWidth / 2, y, { align: 'center' });
+  doc.text(` |  Paid via ${inv.mode || 'CASH'}   Thank you for your payment.`, margin + 46, y + 5.3);
+
+  y += 14;
+
+  // 10. LUXURY 3-COLUMN FOOTER
+  doc.setDrawColor(230, 225, 215);
+  doc.setLineWidth(0.4);
+  doc.line(margin, y, margin + contentWidth, y);
   y += 5;
+
+  // Left Column: Review message
+  const fCol1 = margin;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(184, 151, 61);
+  doc.text('LOVE OUR SERVICE?', fCol1, y + 3);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Scan & leave us a Google Review', fCol1, y + 7);
+  doc.setTextColor(234, 179, 8); // Gold stars
+  doc.setFontSize(8);
+  doc.text('[ * * * * * ]', fCol1, y + 11.5);
+
+  // Center Column: Follow us
+  const fCol2 = margin + (contentWidth / 2);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(184, 151, 61);
+  doc.text('FOLLOW US', fCol2, y + 3, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(80, 80, 80);
+  doc.text('@newdukeandduchess', fCol2, y + 7, { align: 'center' });
+  doc.text('Instagram  |  Facebook  |  WhatsApp', fCol2, y + 11, { align: 'center' });
+
+  // Right Column: Thank You message
+  const fCol3 = margin + contentWidth;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(184, 151, 61);
+  doc.text('Thank You!', fCol3, y + 3, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
-  doc.setTextColor(140, 140, 140);
-  doc.text('Official Computer Generated Tax Invoice & Receipt • No Signature Required', pageWidth / 2, y, { align: 'center' });
+  doc.setTextColor(90, 90, 90);
+  doc.text('Thank you for visiting the New Duke & Duchess family.', fCol3, y + 7, { align: 'right' });
+  doc.text('We truly appreciate your support & look forward to seeing you again!', fCol3, y + 10.5, { align: 'right' });
+
+  y += 16;
+
+  // 11. BOTTOM BLACK BANNER: STYLE IS A REFLECTION OF YOUR ATTITUDE
+  doc.setFillColor(17, 17, 17);
+  doc.rect(margin, y, contentWidth, 6, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(184, 151, 61);
+  doc.text('--  STYLE IS A REFLECTION OF YOUR ATTITUDE  --', margin + (contentWidth / 2), y + 4.2, { align: 'center' });
+
+  y += 8;
+
+  // 12. Bottom System Note
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6);
+  doc.setTextColor(150, 150, 150);
+  doc.text('Official Computer Generated Tax Invoice & Receipt - No Signature Required', pageWidth / 2, y, { align: 'center' });
 
   return doc;
 }
