@@ -29,7 +29,8 @@ import {
   Tag,
   Percent,
   User,
-  Phone
+  Phone,
+  MessageCircle
 } from 'lucide-react';
 
 // POS cart item type
@@ -340,6 +341,93 @@ function generateReceiptHtmlString(inv: Invoice) {
   </div>
 </body>
 </html>`;
+}
+
+// Clean phone number for WhatsApp Web/API (defaults to India 91 prefix if 10 digits)
+function cleanPhoneNumber(phone?: string) {
+  if (!phone) return '';
+  let cleaned = phone.replace(/[^0-9]/g, '');
+  if (cleaned.length === 10) {
+    cleaned = '91' + cleaned;
+  }
+  return cleaned;
+}
+
+// Generate formatted receipt message for WhatsApp
+function generateWhatsAppReceiptMessage(inv: Invoice) {
+  const baseAmt = Number(inv.amount) || 0;
+  const gstRate = inv.gst > 0 ? inv.gst : 18;
+  const subtotal = inv.subtotal !== undefined
+    ? inv.subtotal
+    : (inv.gst > 0 ? Math.round((baseAmt / (1 + inv.gst / 100)) * 100) / 100 : baseAmt);
+  const taxAmt = inv.taxAmount !== undefined
+    ? inv.taxAmount
+    : Math.round(((subtotal * gstRate) / 100) * 100) / 100;
+  const totalPayable = Math.round((subtotal + taxAmt) * 100) / 100;
+
+  const itemsList: InvoiceItem[] = (inv.items && inv.items.length > 0)
+    ? inv.items
+    : (inv.service || 'Salon Service').split(', ').map(s => {
+        const match = s.match(/^(.*?)\s*x(\d+)$/);
+        if (match) {
+          const name = match[1];
+          const qty = parseInt(match[2], 10) || 1;
+          const rate = Math.round((subtotal / qty) * 100) / 100;
+          return { name, qty, rate, amount: subtotal, stylist: '-' };
+        }
+        return { name: s, qty: 1, rate: subtotal, amount: subtotal, stylist: '-' };
+      });
+
+  const itemsText = itemsList
+    .map(i => `✂️ *${i.name}* (Qty: ${i.qty}) - ₹${Number(i.amount).toFixed(2)}`)
+    .join('\n');
+
+  const dateTimeStr = formatReceiptDateTime(inv.date);
+
+  return `✨ *NEW DUKE & DUCHESS UNISEX SALON* ✨
+━━━━━━━━━━━━━━━━━━━━
+*OFFICIAL TAX INVOICE & RECEIPT*
+
+📄 *Invoice No:* ${inv.id}
+📅 *Date & Time:* ${dateTimeStr}
+👤 *Customer:* ${inv.customer || 'Valued Client'}
+📱 *Mobile:* ${inv.phone || 'N/A'}
+💳 *Payment Mode:* ${inv.mode.toUpperCase()} (PAID ✅)
+
+✂️ *SERVICES & PRODUCTS:*
+${itemsText}
+
+━━━━━━━━━━━━━━━━━━━━
+Subtotal: ₹${subtotal.toFixed(2)}
+Tax (GST): ₹${taxAmt.toFixed(2)}
+*TOTAL PAID: ₹${totalPayable.toFixed(2)}*
+━━━━━━━━━━━━━━━━━━━━
+✅ *Payment Status:* SUCCESSFUL
+
+📍 07, Krishna Garden Main Rd, Near New Happy Home, RR Nagar, Bengaluru - 560098
+📞 Contact: +91 89047 10353
+
+Thank you for visiting the New Duke & Duchess family! ❤️
+We truly appreciate your support and look forward to seeing you again! ⭐
+
+_♥ Style is a reflection of your attitude ♥_`;
+}
+
+// Redirects to WhatsApp Web/App with pre-filled receipt message directly to customer phone
+function openWhatsAppReceipt(inv: Invoice) {
+  if (typeof window === 'undefined') return;
+  const cleanedPhone = cleanPhoneNumber(inv.phone);
+  const message = generateWhatsAppReceiptMessage(inv);
+  const encodedMsg = encodeURIComponent(message);
+
+  let url = '';
+  if (cleanedPhone) {
+    url = `https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodedMsg}`;
+  } else {
+    url = `https://api.whatsapp.com/send?text=${encodedMsg}`;
+  }
+
+  window.open(url, '_blank');
 }
 
 export default function DukeDuchessBillingApp() {
@@ -900,6 +988,7 @@ export default function DukeDuchessBillingApp() {
     setNewInvoiceModal(false);
     setInvCustomer('');
     setReceiptInvoice(newInv);
+    openWhatsAppReceipt(newInv);
   };
 
   // ── POS Cart State ────────────────────────────────────────────────────────
@@ -992,6 +1081,7 @@ export default function DukeDuchessBillingApp() {
     fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
     setBillSuccess(true);
     setReceiptInvoice(newInv);
+    openWhatsAppReceipt(newInv);
     setTimeout(() => {
       setBillSuccess(false);
       setCartItems([]);
@@ -1229,12 +1319,21 @@ export default function DukeDuchessBillingApp() {
                           </span>
                         </td>
                         <td style={{ padding: '1rem', textAlign: 'right' }}>
-                          <button
-                            onClick={() => setReceiptInvoice(inv)}
-                            style={{ background: 'rgba(212,175,55,0.15)', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Receipt size={13} /> View
-                          </button>
+                          <div style={{ display: 'inline-flex', gap: '6px' }}>
+                            <button
+                              onClick={() => openWhatsAppReceipt(inv)}
+                              title="Send receipt on WhatsApp"
+                              style={{ background: 'rgba(37,211,102,0.15)', border: '1px solid #25D366', color: '#25D366', borderRadius: '6px', padding: '4px 8px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <MessageCircle size={13} /> WhatsApp
+                            </button>
+                            <button
+                              onClick={() => setReceiptInvoice(inv)}
+                              style={{ background: 'rgba(212,175,55,0.15)', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Receipt size={13} /> View
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -2022,6 +2121,13 @@ export default function DukeDuchessBillingApp() {
                         {/* Actions */}
                         <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                           <button
+                            onClick={() => openWhatsAppReceipt(inv)}
+                            title="Send receipt on WhatsApp"
+                            style={{ padding: '0.45rem 0.9rem', borderRadius: '8px', border: '1.5px solid #25D366', backgroundColor: 'rgba(37,211,102,0.12)', color: '#25D366', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                          >
+                            <MessageCircle size={14} /> WhatsApp
+                          </button>
+                          <button
                             onClick={() => setReceiptInvoice(inv)}
                             style={{ padding: '0.45rem 0.9rem', borderRadius: '8px', border: '1.5px solid var(--accent-gold)', backgroundColor: 'rgba(212,175,55,0.1)', color: 'var(--accent-gold)', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
                           >
@@ -2127,7 +2233,13 @@ export default function DukeDuchessBillingApp() {
                   Size: ~14 KB (&lt; 50 KB Guarantee)
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => openWhatsAppReceipt(inv)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#25D366', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(37,211,102,0.35)' }}
+                >
+                  <MessageCircle size={14} /> Send on WhatsApp
+                </button>
                 <button
                   onClick={handleDownloadHtml}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#2563eb', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
