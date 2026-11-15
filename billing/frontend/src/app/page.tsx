@@ -56,11 +56,15 @@ type Invoice = {
   service: string;
   items?: InvoiceItem[];
   subtotal?: number;
+  discount?: number;
+  discountType?: 'percent' | 'flat';
+  discountAmount?: number;
+  taxableAmount?: number;
   taxAmount?: number;
+  taxType?: 'exclusive' | 'inclusive';
   date: string;
   amount: number;
   gst: number;
-  discount: number;
   status: 'PAID' | 'UNPAID';
   mode: string;
 };
@@ -75,6 +79,75 @@ type Customer = {
   balance: number;
   tag: string;
 };
+
+// Compute accurate, complete invoice financial breakdown
+function computeInvoiceFinancials(inv: Invoice) {
+  const itemsGross = (inv.items && inv.items.length > 0)
+    ? inv.items.reduce((s, i) => s + (Number(i.amount) || ((Number(i.rate) || 0) * (Number(i.qty) || 1)) || 0), 0)
+    : 0;
+
+  const totalAmount = Number(inv.amount) || 0;
+  const gstRate = Number(inv.gst) || 0;
+
+  let grossSubtotal = inv.subtotal !== undefined && inv.subtotal > 0
+    ? Number(inv.subtotal)
+    : (itemsGross > 0 ? itemsGross : totalAmount);
+
+  // If subtotal was stored as after-discount, restore true gross subtotal from items
+  if (itemsGross > grossSubtotal) {
+    grossSubtotal = itemsGross;
+  }
+
+  let discountAmt = Number(inv.discountAmount) || 0;
+  if (!discountAmt && inv.discount && inv.discount > 0) {
+    if (inv.discountType === 'flat') {
+      discountAmt = inv.discount;
+    } else {
+      discountAmt = (grossSubtotal * inv.discount) / 100;
+    }
+  }
+  // Recover legacy discount if items were higher than total without tax
+  if (!discountAmt && itemsGross > 0 && totalAmount > 0 && itemsGross > totalAmount) {
+    discountAmt = itemsGross - totalAmount;
+  }
+  discountAmt = Math.min(discountAmt, grossSubtotal);
+
+  const afterDiscount = Math.max(0, grossSubtotal - discountAmt);
+
+  let taxAmt = 0;
+  if (inv.taxAmount !== undefined && inv.taxAmount !== null && inv.taxAmount > 0) {
+    taxAmt = Number(inv.taxAmount);
+  } else if (gstRate > 0) {
+    taxAmt = Math.round(((afterDiscount * gstRate) / 100) * 100) / 100;
+  }
+
+  let taxableAmt = inv.taxableAmount !== undefined
+    ? Number(inv.taxableAmount)
+    : (inv.taxType === 'inclusive' ? (afterDiscount - taxAmt) : afterDiscount);
+
+  let totalPayable = totalAmount > 0
+    ? totalAmount
+    : Math.round((afterDiscount + (inv.taxType === 'inclusive' ? 0 : taxAmt)) * 100) / 100;
+
+  const discountPercent = inv.discount && inv.discountType === 'percent'
+    ? inv.discount
+    : (discountAmt > 0 && grossSubtotal > 0 ? Math.round((discountAmt / grossSubtotal) * 100) : 0);
+
+  return {
+    grossSubtotal,
+    discountAmt,
+    discountPercent,
+    afterDiscount,
+    taxableAmt,
+    gstRate,
+    taxAmt,
+    cgstRate: gstRate / 2,
+    cgstAmt: Math.round((taxAmt / 2) * 100) / 100,
+    sgstRate: gstRate / 2,
+    sgstAmt: Math.round((taxAmt / 2) * 100) / 100,
+    totalPayable
+  };
+}
 
 // Format Date & Time helper (e.g. "03 Jul 2026, 03:46 pm")
 function formatReceiptDateTime(dateStr?: string) {
@@ -100,15 +173,7 @@ function formatReceiptDateTime(dateStr?: string) {
 
 // Generates self-contained, standalone HTML receipt strictly under 50KB (~14KB)
 function generateReceiptHtmlString(inv: Invoice) {
-  const baseAmt = Number(inv.amount) || 0;
-  const gstRate = inv.gst > 0 ? inv.gst : 18;
-  const subtotal = inv.subtotal !== undefined
-    ? inv.subtotal
-    : (inv.gst > 0 ? Math.round((baseAmt / (1 + inv.gst / 100)) * 100) / 100 : baseAmt);
-  const taxAmt = inv.taxAmount !== undefined
-    ? inv.taxAmount
-    : Math.round(((subtotal * gstRate) / 100) * 100) / 100;
-  const totalPayable = Math.round((subtotal + taxAmt) * 100) / 100;
+  const fin = computeInvoiceFinancials(inv);
 
   const itemsList: InvoiceItem[] = (inv.items && inv.items.length > 0)
     ? inv.items
@@ -117,10 +182,10 @@ function generateReceiptHtmlString(inv: Invoice) {
         if (match) {
           const name = match[1];
           const qty = parseInt(match[2], 10) || 1;
-          const rate = Math.round((subtotal / qty) * 100) / 100;
-          return { name, qty, rate, amount: subtotal, stylist: '-' };
+          const rate = Math.round((fin.grossSubtotal / qty) * 100) / 100;
+          return { name, qty, rate, amount: fin.grossSubtotal, stylist: '-' };
         }
-        return { name: s, qty: 1, rate: subtotal, amount: subtotal, stylist: '-' };
+        return { name: s, qty: 1, rate: fin.grossSubtotal, amount: fin.grossSubtotal, stylist: '-' };
       });
 
   const rowsHtml = itemsList.map(item => `
@@ -212,20 +277,40 @@ function generateReceiptHtmlString(inv: Invoice) {
       </tbody>
     </table>
 
-    <!-- Subtotal, Tax and Total Payable -->
+    <!-- Subtotal, Discount, Tax and Total Payable -->
     <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
-      <div style="width: 250px;">
+      <div style="width: 270px;">
         <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151; padding: 4px 6px; border-top: 1px solid #e5e7eb;">
           <span>Subtotal</span>
-          <strong>₹${subtotal.toFixed(2)}</strong>
+          <strong>₹${fin.grossSubtotal.toFixed(2)}</strong>
+        </div>
+        ${fin.discountAmt > 0 ? `
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #10b981; padding: 4px 6px;">
+          <span>Discount ${fin.discountPercent > 0 ? `(${fin.discountPercent}%)` : ''}</span>
+          <strong style="color: #10b981;">- ₹${fin.discountAmt.toFixed(2)}</strong>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151; padding: 4px 6px;">
-          <span>Tax (GST)</span>
-          <strong>₹${taxAmt.toFixed(2)}</strong>
+          <span>Taxable Amount</span>
+          <strong>₹${fin.taxableAmt.toFixed(2)}</strong>
         </div>
+        ` : ''}
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151; padding: 4px 6px;">
+          <span>Tax (GST ${fin.gstRate > 0 ? `${fin.gstRate}%` : ''})</span>
+          <strong>₹${fin.taxAmt.toFixed(2)}</strong>
+        </div>
+        ${fin.gstRate > 0 ? `
+        <div style="display: flex; justify-content: space-between; font-size: 10.5px; color: #6b7280; padding: 1px 6px 2px 14px;">
+          <span>CGST (${fin.cgstRate}%)</span>
+          <span>₹${fin.cgstAmt.toFixed(2)}</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 10.5px; color: #6b7280; padding: 1px 6px 3px 14px;">
+          <span>SGST (${fin.sgstRate}%)</span>
+          <span>₹${fin.sgstAmt.toFixed(2)}</span>
+        </div>
+        ` : ''}
         <div style="background: #000; color: #b8973d; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; margin-top: 4px;">
           <span style="font-size: 11px; font-weight: 700; letter-spacing: 1px;">TOTAL PAYABLE</span>
-          <span style="font-size: 20px; font-weight: 800; color: #b8973d;">₹ ${totalPayable.toFixed(2)}</span>
+          <span style="font-size: 20px; font-weight: 800; color: #b8973d;">₹ ${fin.totalPayable.toFixed(2)}</span>
         </div>
       </div>
     </div>
@@ -346,15 +431,7 @@ function cleanPhoneNumber(phone?: string) {
 
 // Generate formatted receipt message for WhatsApp
 function generateWhatsAppReceiptMessage(inv: Invoice) {
-  const baseAmt = Number(inv.amount) || 0;
-  const gstRate = inv.gst > 0 ? inv.gst : 18;
-  const subtotal = inv.subtotal !== undefined
-    ? inv.subtotal
-    : (inv.gst > 0 ? Math.round((baseAmt / (1 + inv.gst / 100)) * 100) / 100 : baseAmt);
-  const taxAmt = inv.taxAmount !== undefined
-    ? inv.taxAmount
-    : Math.round(((subtotal * gstRate) / 100) * 100) / 100;
-  const totalPayable = Math.round((subtotal + taxAmt) * 100) / 100;
+  const fin = computeInvoiceFinancials(inv);
 
   const itemsList: InvoiceItem[] = (inv.items && inv.items.length > 0)
     ? inv.items
@@ -363,10 +440,10 @@ function generateWhatsAppReceiptMessage(inv: Invoice) {
         if (match) {
           const name = match[1];
           const qty = parseInt(match[2], 10) || 1;
-          const rate = Math.round((subtotal / qty) * 100) / 100;
-          return { name, qty, rate, amount: subtotal, stylist: '-' };
+          const rate = Math.round((fin.grossSubtotal / qty) * 100) / 100;
+          return { name, qty, rate, amount: fin.grossSubtotal, stylist: '-' };
         }
-        return { name: s, qty: 1, rate: subtotal, amount: subtotal, stylist: '-' };
+        return { name: s, qty: 1, rate: fin.grossSubtotal, amount: fin.grossSubtotal, stylist: '-' };
       });
 
   const itemsText = itemsList
@@ -374,6 +451,14 @@ function generateWhatsAppReceiptMessage(inv: Invoice) {
     .join('\n');
 
   const dateTimeStr = formatReceiptDateTime(inv.date);
+
+  const discountLine = fin.discountAmt > 0
+    ? `Discount${fin.discountPercent > 0 ? ` (${fin.discountPercent}%)` : ''}: -₹${fin.discountAmt.toFixed(2)}\nTaxable Amount: ₹${fin.taxableAmt.toFixed(2)}\n`
+    : '';
+
+  const gstLines = fin.gstRate > 0
+    ? `Tax (GST ${fin.gstRate}%): ₹${fin.taxAmt.toFixed(2)}\n  • CGST (${fin.cgstRate}%): ₹${fin.cgstAmt.toFixed(2)}\n  • SGST (${fin.sgstRate}%): ₹${fin.sgstAmt.toFixed(2)}`
+    : `Tax (GST): ₹0.00`;
 
   return `✨ *NEW DUKE & DUCHESS UNISEX SALON* ✨
 ━━━━━━━━━━━━━━━━━━━━
@@ -389,9 +474,9 @@ function generateWhatsAppReceiptMessage(inv: Invoice) {
 ${itemsText}
 
 ━━━━━━━━━━━━━━━━━━━━
-Subtotal: ₹${subtotal.toFixed(2)}
-Tax (GST): ₹${taxAmt.toFixed(2)}
-*TOTAL PAID: ₹${totalPayable.toFixed(2)}*
+Subtotal: ₹${fin.grossSubtotal.toFixed(2)}
+${discountLine}${gstLines}
+*TOTAL PAID: ₹${fin.totalPayable.toFixed(2)}*
 ━━━━━━━━━━━━━━━━━━━━
 ✅ *Payment Status:* SUCCESSFUL
 
@@ -965,11 +1050,13 @@ export default function DukeDuchessBillingApp() {
       service: invService,
       items: [{ name: invService, qty: 1, rate: itemAmt, amount: itemAmt, stylist: '-' }],
       subtotal: itemAmt,
+      discount: 0,
+      discountAmount: 0,
+      taxableAmount: itemAmt,
       taxAmount: 0,
       date: new Date().toISOString(),
       amount: itemAmt,
       gst: 0,
-      discount: 0,
       status: 'PAID',
       mode: invPayMode
     };
@@ -989,6 +1076,7 @@ export default function DukeDuchessBillingApp() {
   const [discountType,  setDiscountType]  = useState<'percent' | 'flat'>('percent');
   const [discountValue, setDiscountValue] = useState('');
   const [gstRate,       setGstRate]       = useState<0 | 5 | 12 | 18>(18);
+  const [taxType,       setTaxType]       = useState<'exclusive' | 'inclusive'>('exclusive');
   const [posPayMode,    setPosPayMode]    = useState('UPI');
   const [posServiceTab, setPosServiceTab] = useState<'men' | 'women' | 'products'>('men');
   const [posSearch,     setPosSearch]     = useState('');
@@ -1014,9 +1102,18 @@ export default function DukeDuchessBillingApp() {
       ? (cartSubtotal * parseFloat(discountValue)) / 100
       : parseFloat(discountValue)
     : 0;
-  const afterDiscount = Math.max(0, cartSubtotal - discountAmt);
-  const gstAmt        = (afterDiscount * gstRate) / 100;
-  const grandTotal    = afterDiscount + gstAmt;
+  const clampedDiscount = Math.min(discountAmt, cartSubtotal);
+  const afterDiscount   = Math.max(0, cartSubtotal - clampedDiscount);
+
+  const gstAmt = taxType === 'inclusive'
+    ? (gstRate > 0 ? Math.round((afterDiscount - (afterDiscount / (1 + gstRate / 100))) * 100) / 100 : 0)
+    : Math.round(((afterDiscount * gstRate) / 100) * 100) / 100;
+  const grandTotal = taxType === 'inclusive'
+    ? afterDiscount
+    : Math.round((afterDiscount + gstAmt) * 100) / 100;
+  const taxableAmt = taxType === 'inclusive'
+    ? Math.round((afterDiscount - gstAmt) * 100) / 100
+    : afterDiscount;
 
   const handleGenerateBill = () => {
     if (cartItems.length === 0) { alert('⚠️ Cart is empty. Please add services first.'); return; }
@@ -1058,12 +1155,16 @@ export default function DukeDuchessBillingApp() {
       phone: posPhone,
       service: serviceNames,
       items: billItems,
-      subtotal: Math.round(afterDiscount),
-      taxAmount: Math.round(gstAmt),
+      subtotal: Math.round(cartSubtotal * 100) / 100,
+      discount: discountValue ? parseFloat(discountValue) || 0 : 0,
+      discountType,
+      discountAmount: Math.round(clampedDiscount * 100) / 100,
+      taxableAmount: taxableAmt,
+      taxAmount: gstAmt,
+      taxType,
       date: new Date().toISOString(),
-      amount: Math.round(grandTotal),
+      amount: grandTotal,
       gst: gstRate,
-      discount: discountType === 'percent' ? parseFloat(discountValue) || 0 : 0,
       status: 'PAID',
       mode: posPayMode
     };
@@ -1077,7 +1178,7 @@ export default function DukeDuchessBillingApp() {
       setBillSuccess(false);
       setCartItems([]);
       setPosCustomer(''); setPosPhone('');
-      setDiscountValue(''); setGstRate(18);
+      setDiscountValue(''); setGstRate(18); setTaxType('exclusive');
       setPhoneLookupStatus('idle'); setPhoneLookupMsg('');
     }, 2500);
   };
@@ -1928,8 +2029,41 @@ export default function DukeDuchessBillingApp() {
 
               {/* GST */}
               <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1rem 1.25rem' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Percent size={13} /> GST Rate
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <Percent size={13} /> GST Rate
+                  </div>
+                  {/* Inclusive / Exclusive Toggle */}
+                  <div style={{ display: 'flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', fontSize: '0.72rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => setTaxType('exclusive')}
+                      style={{
+                        padding: '0.2rem 0.55rem',
+                        border: 'none',
+                        backgroundColor: taxType === 'exclusive' ? 'var(--accent-gold)' : 'transparent',
+                        color: taxType === 'exclusive' ? '#000' : 'var(--text-muted)',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      + Extra
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTaxType('inclusive')}
+                      style={{
+                        padding: '0.2rem 0.55rem',
+                        border: 'none',
+                        backgroundColor: taxType === 'inclusive' ? 'var(--accent-gold)' : 'transparent',
+                        color: taxType === 'inclusive' ? '#000' : 'var(--text-muted)',
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Included
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
                   {([0, 5, 12, 18] as const).map(rate => (
@@ -1949,8 +2083,9 @@ export default function DukeDuchessBillingApp() {
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '0.65rem' }}>Bill Summary</div>
                 {[
                   { label: 'Subtotal', value: cartSubtotal },
-                  { label: `Discount${discountValue ? ` (${discountType === 'percent' ? discountValue + '%' : '₹' + discountValue})` : ''}`, value: -Math.min(discountAmt, cartSubtotal), color: '#10b981' },
-                  { label: `GST (${gstRate}%)`, value: gstAmt, color: '#3b82f6' },
+                  ...(clampedDiscount > 0 ? [{ label: `Discount${discountValue ? ` (${discountType === 'percent' ? discountValue + '%' : '₹' + discountValue})` : ''}`, value: -clampedDiscount, color: '#10b981' }] : []),
+                  ...(clampedDiscount > 0 ? [{ label: 'Taxable Amount', value: taxableAmt, color: 'var(--text-main)' }] : []),
+                  { label: `GST (${gstRate}%)${taxType === 'inclusive' ? ' (Included)' : ''}`, value: gstAmt, color: '#3b82f6' },
                 ].map(row => (
                   <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: '0.4rem' }}>
                     <span style={{ color: 'var(--text-muted)' }}>{row.label}</span>
@@ -2154,15 +2289,7 @@ export default function DukeDuchessBillingApp() {
       {/* ── RECEIPT MODAL (Matches Sample Design & < 50KB Guarantee) ── */}
       {receiptInvoice && (() => {
         const inv = receiptInvoice;
-        const baseAmt = Number(inv.amount) || 0;
-        const gstRate = inv.gst > 0 ? inv.gst : 18;
-        const subtotal = inv.subtotal !== undefined
-          ? inv.subtotal
-          : (inv.gst > 0 ? Math.round((baseAmt / (1 + inv.gst / 100)) * 100) / 100 : baseAmt);
-        const taxAmt = inv.taxAmount !== undefined
-          ? inv.taxAmount
-          : Math.round(((subtotal * gstRate) / 100) * 100) / 100;
-        const totalPayable = Math.round((subtotal + taxAmt) * 100) / 100;
+        const fin = computeInvoiceFinancials(inv);
 
         const itemsList: InvoiceItem[] = (inv.items && inv.items.length > 0)
           ? inv.items
@@ -2171,10 +2298,10 @@ export default function DukeDuchessBillingApp() {
               if (match) {
                 const name = match[1];
                 const qty = parseInt(match[2], 10) || 1;
-                const rate = Math.round((subtotal / qty) * 100) / 100;
-                return { name, qty, rate, amount: subtotal, stylist: '-' };
+                const rate = Math.round((fin.grossSubtotal / qty) * 100) / 100;
+                return { name, qty, rate, amount: fin.grossSubtotal, stylist: '-' };
               }
-              return { name: s, qty: 1, rate: subtotal, amount: subtotal, stylist: '-' };
+              return { name: s, qty: 1, rate: fin.grossSubtotal, amount: fin.grossSubtotal, stylist: '-' };
             });
 
         const dateTimeStr = formatReceiptDateTime(inv.date);
@@ -2323,20 +2450,44 @@ export default function DukeDuchessBillingApp() {
                 </tbody>
               </table>
 
-              {/* Subtotal, Tax and Total Payable */}
+              {/* Subtotal, Discount, Tax and Total Payable */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-                <div style={{ width: '250px' }}>
+                <div style={{ width: '270px' }}>
                   <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '12px', color: '#374151', padding: '4px 6px', borderTop: '1px solid #e5e7eb' }}>
                     <span>Subtotal</span>
-                    <strong>₹{subtotal.toFixed(2)}</strong>
+                    <strong>₹{fin.grossSubtotal.toFixed(2)}</strong>
                   </div>
+                  {fin.discountAmt > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '12px', color: '#10b981', padding: '4px 6px' }}>
+                        <span>Discount {fin.discountPercent > 0 ? `(${fin.discountPercent}%)` : ''}</span>
+                        <strong style={{ color: '#10b981' }}>- ₹{fin.discountAmt.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '12px', color: '#374151', padding: '4px 6px' }}>
+                        <span>Taxable Amount</span>
+                        <strong>₹{fin.taxableAmt.toFixed(2)}</strong>
+                      </div>
+                    </>
+                  )}
                   <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '12px', color: '#374151', padding: '4px 6px' }}>
-                    <span>Tax (GST)</span>
-                    <strong>₹{taxAmt.toFixed(2)}</strong>
+                    <span>Tax (GST {fin.gstRate > 0 ? `${fin.gstRate}%` : ''})</span>
+                    <strong>₹{fin.taxAmt.toFixed(2)}</strong>
                   </div>
+                  {fin.gstRate > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '10.5px', color: '#6b7280', padding: '1px 6px 2px 14px' }}>
+                        <span>CGST ({fin.cgstRate}%)</span>
+                        <span>₹{fin.cgstAmt.toFixed(2)}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '10.5px', color: '#6b7280', padding: '1px 6px 3px 14px' }}>
+                        <span>SGST ({fin.sgstRate}%)</span>
+                        <span>₹{fin.sgstAmt.toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                   <div style={{ background: '#000', color: '#b8973d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', marginTop: '4px' }}>
                     <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>TOTAL PAYABLE</span>
-                    <span style={{ fontSize: '20px', fontWeight: 800, color: '#b8973d' }}>₹ {totalPayable.toFixed(2)}</span>
+                    <span style={{ fontSize: '20px', fontWeight: 800, color: '#b8973d' }}>₹ {fin.totalPayable.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
