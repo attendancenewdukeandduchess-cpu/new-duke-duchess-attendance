@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import { SALON_LOGO_DATA_URI } from './logoDataUri';
 import { initialMenSections, initialWomenSections, initialProductItems } from './initialCatalogue';
+import { downloadReceiptPdf } from '@/lib/pdfReceipt';
 
 // POS cart item type
 type CartItem = { id: string; name: string; price: number; qty: number };
@@ -758,6 +759,7 @@ export default function DukeDuchessBillingApp() {
     setInvCustomer('');
     setReceiptInvoice(newInv);
     openWhatsAppReceipt(newInv);
+    downloadReceiptPdf(newInv);
   };
 
   // ── POS Cart State ────────────────────────────────────────────────────────
@@ -870,6 +872,7 @@ export default function DukeDuchessBillingApp() {
     setBillSuccess(true);
     setReceiptInvoice(newInv);
     openWhatsAppReceipt(newInv);
+    downloadReceiptPdf(newInv);
     setTimeout(() => {
       setBillSuccess(false);
       setCartItems([]);
@@ -2604,10 +2607,11 @@ export default function DukeDuchessBillingApp() {
                   <MessageCircle size={14} /> Send on WhatsApp
                 </button>
                 <button
-                  onClick={handleDownloadHtml}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#2563eb', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+                  onClick={() => downloadReceiptPdf(inv)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#2563eb', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(37,99,235,0.35)' }}
+                  title="Download official PDF receipt directly to your local folder"
                 >
-                  <Download size={14} /> Download (&lt;50KB)
+                  <Download size={14} /> Download PDF (&lt;50KB)
                 </button>
                 <button
                   onClick={() => { if (typeof window !== 'undefined') window.print(); }}
