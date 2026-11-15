@@ -452,22 +452,44 @@ export default function DukeDuchessBillingApp() {
   ]);
 
   // ── Catalogue CRUD helpers ────────────────────────────────────────────────
+  // Helper: persist catalogue to MongoDB after any change
+  const saveCatalogue = (
+    newMen?: typeof menSections,
+    newWomen?: typeof womenSections,
+    newProducts?: typeof productItems
+  ) => {
+    const payload: Record<string, unknown> = {};
+    if (newMen !== undefined) payload.menSections = newMen;
+    if (newWomen !== undefined) payload.womenSections = newWomen;
+    if (newProducts !== undefined) payload.productItems = newProducts;
+    fetch('/api/billing/catalogue', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }).catch(err => console.error('Failed to save catalogue:', err));
+  };
+
   const handleAddService = () => {
     if (!svcName.trim() || !svcPrice.trim()) return;
-    const targetSections = svcGender === 'MEN' ? menSections : womenSections;
-    const setter = svcGender === 'MEN' ? setMenSections : setWomenSections;
-    const sectionName = svcSection.trim() || (svcGender === 'MEN' ? 'MEN GENERAL' : 'WOMEN GENERAL');
+    const isMen = svcGender === 'MEN';
+    const targetSections = isMen ? menSections : womenSections;
+    const setter = isMen ? setMenSections : setWomenSections;
+    const sectionName = svcSection.trim() || (isMen ? 'MEN GENERAL' : 'WOMEN GENERAL');
     const existing = targetSections.find(s => s.section.toUpperCase() === sectionName.toUpperCase());
-    const prefix = svcGender === 'MEN' ? 'M' : 'W';
+    const prefix = isMen ? 'M' : 'W';
     const allItems = targetSections.flatMap(s => s.items);
     const newId = `${prefix}NEW-${String(allItems.length + 1).padStart(3, '0')}`;
     const newItem = { id: newId, name: svcName.trim(), price: parseFloat(svcPrice) || 0 };
+    let updated: typeof targetSections;
     if (existing) {
-      setter(prev => prev.map(s => s.section.toUpperCase() === sectionName.toUpperCase()
-        ? { ...s, items: [...s.items, newItem] } : s));
+      updated = targetSections.map(s => s.section.toUpperCase() === sectionName.toUpperCase()
+        ? { ...s, items: [...s.items, newItem] } : s);
     } else {
-      setter(prev => [...prev, { section: sectionName.toUpperCase(), items: [newItem] }]);
+      updated = [...targetSections, { section: sectionName.toUpperCase(), items: [newItem] }];
     }
+    setter(updated);
+    if (isMen) saveCatalogue(updated, undefined, undefined);
+    else saveCatalogue(undefined, updated, undefined);
     setSvcName(''); setSvcPrice(''); setSvcSection('');
     setShowAddService(false);
     alert(`✅ Service "${newItem.name}" added under ${svcGender} › ${sectionName.toUpperCase()}`);
@@ -475,24 +497,36 @@ export default function DukeDuchessBillingApp() {
 
   const handleDeleteService = (gender: 'MEN' | 'WOMEN', sectionName: string, itemId: string) => {
     if (!confirm('Delete this service?')) return;
-    const setter = gender === 'MEN' ? setMenSections : setWomenSections;
-    setter(prev => prev.map(s => s.section === sectionName
+    const isMen = gender === 'MEN';
+    const setter = isMen ? setMenSections : setWomenSections;
+    const sections = isMen ? menSections : womenSections;
+    const updated = sections.map(s => s.section === sectionName
       ? { ...s, items: s.items.filter(i => i.id !== itemId) } : s
-    ).filter(s => s.items.length > 0));
+    ).filter(s => s.items.length > 0);
+    setter(updated);
+    if (isMen) saveCatalogue(updated, undefined, undefined);
+    else saveCatalogue(undefined, updated, undefined);
   };
 
   const handleSaveEditService = (gender: 'MEN' | 'WOMEN', sectionName: string, itemId: string) => {
-    const setter = gender === 'MEN' ? setMenSections : setWomenSections;
-    setter(prev => prev.map(s => s.section === sectionName
+    const isMen = gender === 'MEN';
+    const setter = isMen ? setMenSections : setWomenSections;
+    const sections = isMen ? menSections : womenSections;
+    const updated = sections.map(s => s.section === sectionName
       ? { ...s, items: s.items.map(i => i.id === itemId ? { ...i, name: editSvcName, price: parseFloat(editSvcPrice) || i.price } : i) }
-      : s));
+      : s);
+    setter(updated);
+    if (isMen) saveCatalogue(updated, undefined, undefined);
+    else saveCatalogue(undefined, updated, undefined);
     setEditSvcKey(null);
   };
 
   const handleAddProduct = () => {
     if (!prdName.trim() || !prdPrice.trim()) return;
     const newId = `SER-${172 + productItems.length}`;
-    setProductItems(prev => [...prev, { id: newId, name: prdName.trim(), price: parseFloat(prdPrice) || 0 }]);
+    const updated = [...productItems, { id: newId, name: prdName.trim(), price: parseFloat(prdPrice) || 0 }];
+    setProductItems(updated);
+    saveCatalogue(undefined, undefined, updated);
     setPrdName(''); setPrdPrice('');
     setShowAddProduct(false);
     alert(`✅ Product "${prdName.trim()}" added with ID ${newId}`);
@@ -500,11 +534,15 @@ export default function DukeDuchessBillingApp() {
 
   const handleDeleteProduct = (id: string) => {
     if (!confirm('Delete this product?')) return;
-    setProductItems(prev => prev.filter(p => p.id !== id));
+    const updated = productItems.filter(p => p.id !== id);
+    setProductItems(updated);
+    saveCatalogue(undefined, undefined, updated);
   };
 
   const handleSaveEditProduct = (id: string) => {
-    setProductItems(prev => prev.map(p => p.id === id ? { ...p, name: editPrdName, price: parseFloat(editPrdPrice) || p.price } : p));
+    const updated = productItems.map(p => p.id === id ? { ...p, name: editPrdName, price: parseFloat(editPrdPrice) || p.price } : p);
+    setProductItems(updated);
+    saveCatalogue(undefined, undefined, updated);
     setEditPrdId(null);
   };
 
@@ -662,14 +700,19 @@ export default function DukeDuchessBillingApp() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [custRes, invRes] = await Promise.all([
+        const [custRes, invRes, catRes] = await Promise.all([
           fetch('/api/billing/customers'),
           fetch('/api/billing/invoices'),
+          fetch('/api/billing/catalogue'),
         ]);
         const custData = await custRes.json();
         const invData  = await invRes.json();
+        const catData  = await catRes.json();
         if (Array.isArray(custData) && custData.length > 0) setCustomers(custData);
         if (Array.isArray(invData) && invData.length > 0) setInvoices(invData);
+        if (catData.menSections) setMenSections(catData.menSections);
+        if (catData.womenSections) setWomenSections(catData.womenSections);
+        if (catData.productItems) setProductItems(catData.productItems);
       } catch (err) {
         console.error('Failed to load billing data from MongoDB:', err);
       }
