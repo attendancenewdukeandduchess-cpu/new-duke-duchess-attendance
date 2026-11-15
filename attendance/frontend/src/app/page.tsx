@@ -39,7 +39,6 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { getFaceDescriptor, loadFaceModels, compareFaceDescriptors } from '@/lib/face-api';
-import ZohoBillingView from '@/components/ZohoBillingView';
 import FuturisticFaceScanner from '@/components/FuturisticFaceScanner';
 import Link from 'next/link';
 
@@ -49,11 +48,9 @@ export default function EmployeeDashboard() {
 
   const isAdmin = (session?.user as any)?.role === 'ADMIN';
 
-  // Mode & Active navigation tab
-  const [viewMode, setViewMode] = useState<'attendance' | 'billing'>('attendance');
+  // Active navigation tab
   const [activeTab, setActiveTab] = useState<'home' | 'history' | 'profile' | 'employees'>('home');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [adminPortalModalOpen, setAdminPortalModalOpen] = useState(false);
 
   // Home states
   const [attendance, setAttendance] = useState<any>(null);
@@ -167,7 +164,6 @@ export default function EmployeeDashboard() {
       if ((session?.user as any)?.role === 'ADMIN') {
         fetchEmployees();
         fetchAdminAttendance('today', '', '', '');
-        setAdminPortalModalOpen(true);
       }
       // Pre-load face AI models in the background
       loadFaceModels().then(() => setFaceApiReady(true)).catch(() => {
@@ -686,33 +682,6 @@ export default function EmployeeDashboard() {
     );
   });
 
-  if (viewMode === 'billing') {
-    return (
-      <div style={{ position: 'relative' }}>
-        <button
-          onClick={() => setViewMode('attendance')}
-          style={{
-            position: 'fixed',
-            top: '1rem',
-            right: '1rem',
-            zIndex: 9999,
-            backgroundColor: '#d4af37',
-            color: '#000',
-            fontWeight: 700,
-            border: 'none',
-            borderRadius: '8px',
-            padding: '0.5rem 1rem',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-          }}
-        >
-          ← Switch to Attendance System
-        </button>
-        <ZohoBillingView />
-      </div>
-    );
-  }
-
   return (
     <div className="dashboard-layout">
       {/* Mobile Top Header */}
@@ -795,14 +764,25 @@ export default function EmployeeDashboard() {
                   <span>Staff ({employees.length})</span>
                 </button>
 
-                <button
+                <a
+                  href="https://frontend-three-phi-41.vercel.app"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="nav-item"
-                  style={{ color: 'var(--accent-gold)', border: '1px solid rgba(212, 175, 55, 0.3)', backgroundColor: 'rgba(212, 175, 55, 0.08)', marginTop: '0.5rem' }}
-                  onClick={() => setAdminPortalModalOpen(true)}
+                  style={{
+                    color: 'var(--accent-gold)',
+                    border: '1px solid rgba(212, 175, 55, 0.3)',
+                    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+                    marginTop: '0.5rem',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.6rem'
+                  }}
                 >
                   <Sparkles size={20} color="var(--accent-gold)" />
-                  <span>Launch Billing System</span>
-                </button>
+                  <span>Open Billing Portal ↗</span>
+                </a>
               </>
             )}
 
@@ -2468,106 +2448,6 @@ export default function EmployeeDashboard() {
           </div>
         )}
       </main>
-
-      {/* ── ADMIN PORTAL SELECTION MODAL ────────────────────────────────────────── */}
-      {isAdmin && adminPortalModalOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.85)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999
-        }}>
-          <div className="card" style={{ width: '100%', maxWidth: '480px', padding: '2rem', textAlign: 'center', border: '1px solid var(--accent-gold)' }}>
-            <div style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '16px',
-              backgroundColor: 'rgba(212, 175, 55, 0.15)',
-              border: '1px solid var(--accent-gold)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 1.25rem auto'
-            }}>
-              <Crown size={32} color="var(--accent-gold)" />
-            </div>
-
-            <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-              Welcome, Administrator
-            </h2>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.75rem' }}>
-              Please select which section of the New Duke & Duchess platform you wish to launch:
-            </p>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {/* Option 1: Attendance */}
-              <button
-                onClick={() => {
-                  setViewMode('attendance');
-                  setAdminPortalModalOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem 1.25rem',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'var(--bg-secondary)',
-                  color: 'var(--text-main)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'rgba(59, 130, 246, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Clock size={20} color="#3b82f6" />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-main)' }}>1. Salon Attendance System</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>GPS & AI Facial Recognition Staff Clocking</div>
-                </div>
-              </button>
-
-              {/* Option 2: Zoho Billing */}
-              <button
-                onClick={() => {
-                  setViewMode('billing');
-                  setAdminPortalModalOpen(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1rem 1.25rem',
-                  borderRadius: '12px',
-                  border: '1px solid var(--accent-gold)',
-                  backgroundColor: 'rgba(212, 175, 55, 0.1)',
-                  color: 'var(--accent-gold)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                <div style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'rgba(212, 175, 55, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Sparkles size={20} color="var(--accent-gold)" />
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--accent-gold)' }}>2. Salon Billing System</div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Invoicing, POS Cart, Customers, Catalog & Reports</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
