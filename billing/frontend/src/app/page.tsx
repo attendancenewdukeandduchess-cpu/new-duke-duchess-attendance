@@ -37,12 +37,24 @@ type CartItem = { id: string; name: string; price: number; qty: number };
 // Catalogue section type
 type CatalogueSection = { section: string; items: { id: string; name: string; price: number }[] };
 
+// Invoice item type
+type InvoiceItem = {
+  name: string;
+  qty: number;
+  rate: number;
+  amount: number;
+  stylist?: string;
+};
+
 // Invoice type
 type Invoice = {
   id: string;
   customer: string;
   phone: string;
   service: string;
+  items?: InvoiceItem[];
+  subtotal?: number;
+  taxAmount?: number;
   date: string;
   amount: number;
   gst: number;
@@ -61,6 +73,274 @@ type Customer = {
   balance: number;
   tag: string;
 };
+
+// Format Date & Time helper (e.g. "03 Jul 2026, 03:46 pm")
+function formatReceiptDateTime(dateStr?: string) {
+  if (!dateStr) return '03 Jul 2026, 03:46 pm';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strTime = `${String(hours).padStart(2, '0')}:${minutes} ${ampm}`;
+    return `${day} ${month} ${year}, ${strTime}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+// Generates self-contained, standalone HTML receipt strictly under 50KB (~14KB)
+function generateReceiptHtmlString(inv: Invoice) {
+  const baseAmt = Number(inv.amount) || 0;
+  const gstRate = inv.gst > 0 ? inv.gst : 18;
+  const subtotal = inv.subtotal !== undefined
+    ? inv.subtotal
+    : (inv.gst > 0 ? Math.round((baseAmt / (1 + inv.gst / 100)) * 100) / 100 : baseAmt);
+  const taxAmt = inv.taxAmount !== undefined
+    ? inv.taxAmount
+    : Math.round(((subtotal * gstRate) / 100) * 100) / 100;
+  const totalPayable = Math.round((subtotal + taxAmt) * 100) / 100;
+
+  const itemsList: InvoiceItem[] = (inv.items && inv.items.length > 0)
+    ? inv.items
+    : (inv.service || 'Salon Service').split(', ').map(s => {
+        const match = s.match(/^(.*?)\s*x(\d+)$/);
+        if (match) {
+          const name = match[1];
+          const qty = parseInt(match[2], 10) || 1;
+          const rate = Math.round((subtotal / qty) * 100) / 100;
+          return { name, qty, rate, amount: subtotal, stylist: '-' };
+        }
+        return { name: s, qty: 1, rate: subtotal, amount: subtotal, stylist: '-' };
+      });
+
+  const rowsHtml = itemsList.map(item => `
+    <tr style="border-bottom: 1px solid #f0f0f0;">
+      <td style="padding: 10px 12px; font-weight: 600; color: #111;">${item.name}</td>
+      <td style="padding: 10px 12px; text-align: center; color: #555;">${item.stylist || '-'}</td>
+      <td style="padding: 10px 12px; text-align: center; color: #111;">${item.qty}</td>
+      <td style="padding: 10px 12px; text-align: right; color: #111;">${Number(item.rate).toFixed(2)}</td>
+      <td style="padding: 10px 12px; text-align: right; font-weight: 700; color: #111;">${Number(item.amount).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  const dateTimeStr = formatReceiptDateTime(inv.date);
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Receipt - ${inv.id}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #f3f4f6; padding: 20px; color: #111; }
+    .receipt-card { max-width: 680px; margin: 0 auto; background: #ffffff; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 32px 36px 0 36px; border: 1px solid #eaeaea; }
+    @media print {
+      body { background: #fff; padding: 0; }
+      .receipt-card { box-shadow: none; border: none; padding: 15px 20px 0 20px; max-width: 100%; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="receipt-card">
+    <!-- Top Emblem Badge -->
+    <div style="width: 82px; height: 96px; background: #0b0b0b; border-radius: 6px 6px 14px 14px; margin: 0 auto 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1.5px solid #d4af37; padding: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+      <svg width="32" height="24" viewBox="0 0 40 30" fill="none">
+        <path d="M20 2L24.5 10.5L34 5L30 22H10L6 5L15.5 10.5L20 2Z" fill="#d4af37" stroke="#f5d77f" stroke-width="1"/>
+        <circle cx="20" cy="2" r="2" fill="#fff"/>
+        <circle cx="6" cy="5" r="1.5" fill="#fff"/>
+        <circle cx="34" cy="5" r="1.5" fill="#fff"/>
+        <rect x="8" y="24" width="24" height="3" rx="1.5" fill="#d4af37"/>
+      </svg>
+      <div style="font-size: 7px; font-weight: 800; color: #d4af37; letter-spacing: 0.5px; font-family: 'Cinzel', 'Times New Roman', serif; text-align: center; line-height: 1.1; margin-top: 2px;">NEW DUKE &amp;</div>
+      <div style="font-size: 7.5px; font-weight: 800; color: #d4af37; letter-spacing: 0.8px; font-family: 'Cinzel', 'Times New Roman', serif; text-align: center; line-height: 1.1;">DUCHESS</div>
+      <div style="font-size: 5px; font-weight: 600; color: #f3cf55; letter-spacing: 0.5px; margin-top: 1px; text-align: center;">UNISEX SALON</div>
+      <div style="font-size: 8px; color: #d4af37; line-height: 1; margin-top: 1px;">❦</div>
+    </div>
+
+    <!-- Main Salon Title -->
+    <h1 style="font-family: 'Playfair Display', 'Cinzel', 'Times New Roman', serif; font-size: 26px; font-weight: 800; color: #111; letter-spacing: 1.5px; text-transform: uppercase; margin: 0; text-align: center;">NEW DUKE &amp; DUCHESS</h1>
+    
+    <div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin: 4px 0 10px;">
+      <span style="height: 1px; width: 35px; background: #b8973d;"></span>
+      <span style="font-size: 11px; font-weight: 600; color: #b8973d; letter-spacing: 4px; text-transform: uppercase;">UNISEX SALON</span>
+      <span style="height: 1px; width: 35px; background: #b8973d;"></span>
+    </div>
+
+    <!-- Address & Contact -->
+    <div style="font-size: 11.5px; color: #4b5563; text-align: center; max-width: 500px; margin: 0 auto; line-height: 1.45;">
+      📍 07, Krishna Garden Main Rd, Near New Happy Home, Balarama Layout, Rajarajeshwari Nagar, Bengaluru, Karnataka 560098
+    </div>
+    <div style="font-size: 12px; color: #111; font-weight: 600; text-align: center; margin-top: 4px;">
+      📞 +91 89047 10353
+    </div>
+
+    <!-- Invoice Details & Bill To -->
+    <div style="display: grid; grid-template-columns: 1.2fr 1fr; border: 1px solid #e8e3d5; border-top: 3px solid #b8973d; border-radius: 4px; padding: 12px 18px; margin-top: 16px; background-color: #fff;">
+      <div>
+        <div style="font-size: 11px; font-weight: 700; color: #b8973d; letter-spacing: 0.8px; margin-bottom: 8px;">📄 INVOICE DETAILS</div>
+        <div style="font-size: 12px; color: #374151; line-height: 1.7;">
+          <div>Invoice No. &nbsp;&nbsp;&nbsp;&nbsp;: <strong style="color: #111;">${inv.id}</strong></div>
+          <div>Date &amp; Time &nbsp;&nbsp;&nbsp;: <strong style="color: #111;">${dateTimeStr}</strong></div>
+          <div>Payment Mode : <strong style="color: #111; text-transform: uppercase;">${inv.mode}</strong></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 11px; font-weight: 700; color: #b8973d; letter-spacing: 0.8px; margin-bottom: 8px;">👤 BILL TO</div>
+        <div style="font-size: 16px; font-weight: 700; color: #111; text-transform: capitalize;">${inv.customer || 'Walk-in Client'}</div>
+        <div style="font-size: 12.5px; color: #4b5563; margin-top: 5px;">📞 ${inv.phone || 'N/A'}</div>
+      </div>
+    </div>
+
+    <!-- Services Section Header -->
+    <div style="font-size: 12px; font-weight: 700; color: #b8973d; letter-spacing: 1px; margin-top: 18px; margin-bottom: 6px;">✂️ SERVICES</div>
+
+    <!-- Services Table -->
+    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+      <thead>
+        <tr style="background: #000; color: #b8973d;">
+          <th style="text-align: left; padding: 7px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px;">DESCRIPTION</th>
+          <th style="text-align: center; padding: 7px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; width: 70px;">STYLIST</th>
+          <th style="text-align: center; padding: 7px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; width: 60px;">QTY</th>
+          <th style="text-align: right; padding: 7px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; width: 85px;">RATE (₹)</th>
+          <th style="text-align: right; padding: 7px 10px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; width: 95px;">AMOUNT (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+
+    <!-- Subtotal, Tax and Total Payable -->
+    <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+      <div style="width: 250px;">
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151; padding: 4px 6px; border-top: 1px solid #e5e7eb;">
+          <span>Subtotal</span>
+          <strong>₹${subtotal.toFixed(2)}</strong>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 12px; color: #374151; padding: 4px 6px;">
+          <span>Tax (GST)</span>
+          <strong>₹${taxAmt.toFixed(2)}</strong>
+        </div>
+        <div style="background: #000; color: #b8973d; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; margin-top: 4px;">
+          <span style="font-size: 11px; font-weight: 700; letter-spacing: 1px;">TOTAL PAYABLE</span>
+          <span style="font-size: 20px; font-weight: 800; color: #b8973d;">₹ ${totalPayable.toFixed(2)}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Payment Successful Badge -->
+    <div style="border: 1.5px solid #d4af37; border-radius: 4px; background: #fffcf4; padding: 9px 12px; margin-top: 14px; text-align: center; font-size: 12px; color: #1f2937;">
+      <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #b8973d; color: #fff; font-size: 10px; font-weight: bold; margin-right: 6px;">✓</span>
+      <strong>PAYMENT SUCCESSFUL</strong> &nbsp;|&nbsp; Paid via ${inv.mode} &nbsp; Thank you for your payment.
+    </div>
+
+    <!-- Footer Columns -->
+    <div style="display: grid; grid-template-columns: 1.2fr 0.9fr 1.6fr; gap: 12px; align-items: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid #ede8dc;">
+      <!-- Column 1: Review & QR -->
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <svg width="60" height="60" viewBox="0 0 33 33" fill="#111" style="flex-shrink: 0;">
+          <rect x="0" y="0" width="7" height="7" fill="#111"/>
+          <rect x="1" y="1" width="5" height="5" fill="#fff"/>
+          <rect x="2" y="2" width="3" height="3" fill="#111"/>
+          <rect x="26" y="0" width="7" height="7" fill="#111"/>
+          <rect x="27" y="1" width="5" height="5" fill="#fff"/>
+          <rect x="28" y="2" width="3" height="3" fill="#111"/>
+          <rect x="0" y="26" width="7" height="7" fill="#111"/>
+          <rect x="1" y="27" width="5" height="5" fill="#fff"/>
+          <rect x="2" y="28" width="3" height="3" fill="#111"/>
+          <rect x="9" y="2" width="2" height="2"/>
+          <rect x="13" y="2" width="3" height="2"/>
+          <rect x="18" y="2" width="2" height="2"/>
+          <rect x="22" y="2" width="2" height="2"/>
+          <rect x="10" y="6" width="3" height="2"/>
+          <rect x="16" y="6" width="2" height="2"/>
+          <rect x="20" y="6" width="4" height="2"/>
+          <rect x="2" y="9" width="3" height="2"/>
+          <rect x="8" y="10" width="2" height="3"/>
+          <rect x="12" y="10" width="3" height="2"/>
+          <rect x="17" y="9" width="3" height="3"/>
+          <rect x="22" y="10" width="2" height="2"/>
+          <rect x="26" y="9" width="5" height="2"/>
+          <rect x="4" y="14" width="3" height="2"/>
+          <rect x="10" y="14" width="2" height="4"/>
+          <rect x="14" y="14" width="4" height="4"/>
+          <rect x="20" y="14" width="3" height="2"/>
+          <rect x="25" y="14" width="4" height="2"/>
+          <rect x="1" y="18" width="4" height="2"/>
+          <rect x="7" y="18" width="3" height="2"/>
+          <rect x="12" y="19" width="2" height="3"/>
+          <rect x="17" y="19" width="3" height="2"/>
+          <rect x="22" y="18" width="2" height="3"/>
+          <rect x="27" y="18" width="3" height="2"/>
+          <rect x="9" y="24" width="2" height="2"/>
+          <rect x="13" y="24" width="4" height="2"/>
+          <rect x="19" y="23" width="2" height="3"/>
+          <rect x="23" y="24" width="3" height="2"/>
+          <rect x="28" y="24" width="3" height="2"/>
+          <rect x="9" y="28" width="4" height="2"/>
+          <rect x="15" y="28" width="2" height="3"/>
+          <rect x="19" y="28" width="4" height="2"/>
+          <rect x="25" y="28" width="2" height="2"/>
+          <rect x="29" y="28" width="3" height="2"/>
+        </svg>
+        <div>
+          <div style="font-size: 10px; font-weight: 700; color: #b8973d; letter-spacing: 0.5px;">LOVE OUR SERVICE?</div>
+          <div style="font-size: 9px; color: #555; margin-top: 2px;">Scan to leave us a Google Review</div>
+          <div style="color: #d4af37; font-size: 11px; margin-top: 3px; letter-spacing: 1px;">★★★★★</div>
+        </div>
+      </div>
+      
+      <!-- Column 2: Follow Us -->
+      <div style="text-align: center;">
+        <div style="font-size: 10px; font-weight: 700; color: #b8973d; letter-spacing: 0.5px; margin-bottom: 6px;">FOLLOW US</div>
+        <div style="display: flex; justify-content: center; gap: 8px;">
+          <span style="width: 26px; height: 26px; border-radius: 50%; background: #000; display: inline-flex; align-items: center; justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+              <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+              <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+            </svg>
+          </span>
+          <span style="width: 26px; height: 26px; border-radius: 50%; background: #000; display: inline-flex; align-items: center; justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff">
+              <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
+            </svg>
+          </span>
+          <span style="width: 26px; height: 26px; border-radius: 50%; background: #000; display: inline-flex; align-items: center; justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff">
+              <path d="M20.5 3.5A11.9 11.9 0 0 0 12 0C5.4 0 0 5.4 0 12c0 2.1.5 4.1 1.6 5.9L0 24l6.3-1.6c1.7 1 3.7 1.6 5.7 1.6 6.6 0 12-5.4 12-12 0-3.2-1.3-6.2-3.5-8.5zM12 22c-1.8 0-3.6-.5-5.1-1.4l-.4-.2-3.8 1 1-3.7-.2-.4C2.5 15.8 2 13.9 2 12c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10zm5.5-7.5c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.4-.5-2.6-1.6-.9-.8-1.6-1.9-1.8-2.2-.2-.3 0-.5.1-.7.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4-.1-.5-.1-.1-.7-1.7-1-2.3-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9 0 1.7 1.2 3.3 1.4 3.6.2.2 2.4 3.7 5.9 5.2.8.4 1.5.6 2 .7.8.3 1.6.2 2.2.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.6.2-1.7-.1-.2-.3-.3-.6-.5z"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+
+      <!-- Column 3: Thank you -->
+      <div style="text-align: right;">
+        <div style="font-family: 'Brush Script MT', 'Segoe Script', cursive; font-size: 24px; color: #b8973d; line-height: 1;">Thank You! ♡</div>
+        <div style="font-size: 9.5px; color: #555; line-height: 1.35; margin-top: 4px;">
+          Thank you for joining the New Duke &amp; Duchess family ❤️ We truly appreciate your support and look forward to seeing you again! ⭐
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Ribbon -->
+    <div style="background: #000; color: #b8973d; padding: 7px 0; text-align: center; font-size: 9.5px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; margin-top: 16px; margin-left: -36px; margin-right: -36px;">
+      ♥ &nbsp;&nbsp;&nbsp; STYLE IS A REFLECTION OF YOUR ATTITUDE &nbsp;&nbsp;&nbsp; ♥
+    </div>
+  </div>
+</body>
+</html>`;
+}
 
 export default function DukeDuchessBillingApp() {
   const [activeTab, setActiveTab] = useState<
@@ -598,13 +878,17 @@ export default function DukeDuchessBillingApp() {
   const handleCreateInvoice = (e: React.FormEvent) => {
     e.preventDefault();
     const nextNum = invoices.length + 1;
+    const itemAmt = parseFloat(invAmount) || 0;
     const newInv: Invoice = {
       id: `INV-${String(nextNum).padStart(4, '0')}`,
       customer: invCustomer || 'Walk-in Client',
       phone: '',
       service: invService,
-      date: new Date().toISOString().split('T')[0],
-      amount: parseFloat(invAmount) || 0,
+      items: [{ name: invService, qty: 1, rate: itemAmt, amount: itemAmt, stylist: '-' }],
+      subtotal: itemAmt,
+      taxAmount: 0,
+      date: new Date().toISOString(),
+      amount: itemAmt,
       gst: 0,
       discount: 0,
       status: 'PAID',
@@ -615,7 +899,7 @@ export default function DukeDuchessBillingApp() {
     fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
     setNewInvoiceModal(false);
     setInvCustomer('');
-    alert(`✅ Invoice ${newInv.id} successfully created and marked as PAID!`);
+    setReceiptInvoice(newInv);
   };
 
   // ── POS Cart State ────────────────────────────────────────────────────────
@@ -679,13 +963,24 @@ export default function DukeDuchessBillingApp() {
       }));
     }
 
+    const billItems: InvoiceItem[] = cartItems.map(c => ({
+      name: c.name,
+      qty: c.qty,
+      rate: c.price,
+      amount: c.price * c.qty,
+      stylist: '-'
+    }));
+
     const nextNum = invoices.length + 1;
     const newInv: Invoice = {
       id: `INV-${String(nextNum).padStart(4, '0')}`,
       customer: customerName,
       phone: posPhone,
       service: serviceNames,
-      date: new Date().toISOString().split('T')[0],
+      items: billItems,
+      subtotal: Math.round(afterDiscount),
+      taxAmount: Math.round(gstAmt),
+      date: new Date().toISOString(),
       amount: Math.round(grandTotal),
       gst: gstRate,
       discount: discountType === 'percent' ? parseFloat(discountValue) || 0 : 0,
@@ -696,6 +991,7 @@ export default function DukeDuchessBillingApp() {
     // Save invoice to MongoDB
     fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
     setBillSuccess(true);
+    setReceiptInvoice(newInv);
     setTimeout(() => {
       setBillSuccess(false);
       setCartItems([]);
@@ -899,12 +1195,13 @@ export default function DukeDuchessBillingApp() {
                     <th style={{ padding: '0.75rem 1rem' }}>Amount</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Payment Mode</th>
                     <th style={{ padding: '0.75rem 1rem' }}>Status</th>
+                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Receipt</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invoices.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                      <td colSpan={8} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
                         <Receipt size={36} style={{ margin: '0 auto 0.5rem', opacity: 0.3, display: 'block' }} />
                         <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.95rem' }}>No invoices generated yet</div>
                         <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Create your first bill in POS Billing to see live sales here.</div>
@@ -930,6 +1227,14 @@ export default function DukeDuchessBillingApp() {
                           }}>
                             {inv.status}
                           </span>
+                        </td>
+                        <td style={{ padding: '1rem', textAlign: 'right' }}>
+                          <button
+                            onClick={() => setReceiptInvoice(inv)}
+                            style={{ background: 'rgba(212,175,55,0.15)', border: '1px solid var(--accent-gold)', color: 'var(--accent-gold)', borderRadius: '6px', padding: '4px 10px', fontSize: '0.78rem', cursor: 'pointer', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <Receipt size={13} /> View
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -1749,111 +2054,298 @@ export default function DukeDuchessBillingApp() {
         )}
       </main>
 
-      {/* ── RECEIPT MODAL ── */}
+      {/* ── RECEIPT MODAL (Matches Sample Design & < 50KB Guarantee) ── */}
       {receiptInvoice && (() => {
         const inv = receiptInvoice;
-        const baseAmt     = inv.amount;
-        const discountAmt = inv.discount > 0 ? Math.round((baseAmt * inv.discount) / 100) : 0;
-        const afterDisc   = baseAmt - discountAmt;
-        const gstAmt      = inv.gst > 0 ? Math.round((afterDisc * inv.gst) / 100) : 0;
-        const grandTotal  = afterDisc + gstAmt;
+        const baseAmt = Number(inv.amount) || 0;
+        const gstRate = inv.gst > 0 ? inv.gst : 18;
+        const subtotal = inv.subtotal !== undefined
+          ? inv.subtotal
+          : (inv.gst > 0 ? Math.round((baseAmt / (1 + inv.gst / 100)) * 100) / 100 : baseAmt);
+        const taxAmt = inv.taxAmount !== undefined
+          ? inv.taxAmount
+          : Math.round(((subtotal * gstRate) / 100) * 100) / 100;
+        const totalPayable = Math.round((subtotal + taxAmt) * 100) / 100;
+
+        const itemsList: InvoiceItem[] = (inv.items && inv.items.length > 0)
+          ? inv.items
+          : (inv.service || 'Salon Service').split(', ').map(s => {
+              const match = s.match(/^(.*?)\s*x(\d+)$/);
+              if (match) {
+                const name = match[1];
+                const qty = parseInt(match[2], 10) || 1;
+                const rate = Math.round((subtotal / qty) * 100) / 100;
+                return { name, qty, rate, amount: subtotal, stylist: '-' };
+              }
+              return { name: s, qty: 1, rate: subtotal, amount: subtotal, stylist: '-' };
+            });
+
+        const dateTimeStr = formatReceiptDateTime(inv.date);
+
+        const handleDownloadHtml = () => {
+          const htmlContent = generateReceiptHtmlString(inv);
+          const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Receipt-${inv.id}.html`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        };
+
         return (
-          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300 }} onClick={() => setReceiptInvoice(null)}>
-            <div style={{ backgroundColor: '#fff', borderRadius: '16px', width: '420px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
-              {/* Receipt Header */}
-              <div style={{ background: 'linear-gradient(135deg,#1a1a1a,#2d2d2d)', padding: '1.5rem', borderRadius: '16px 16px 0 0', textAlign: 'center', position: 'relative' }}>
-                <button onClick={() => setReceiptInvoice(null)} style={{ position: 'absolute', top: 12, right: 12, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.6)', fontSize: '1.2rem' }}>✕</button>
-                <img src="/logo.png" alt="Duke & Duchess" style={{ width: 86, height: 86, objectFit: 'contain', background: '#fff', borderRadius: '14px', padding: '4px', margin: '0 auto 0.75rem', display: 'block', boxShadow: '0 4px 16px rgba(212,175,55,0.4)' }} />
-                <div style={{ fontWeight: 800, color: '#fff', fontSize: '1.1rem', letterSpacing: '0.5px' }}>NEW DUKE & DUCHESS</div>
-                <div style={{ color: '#d4af37', fontSize: '0.78rem', fontWeight: 600, letterSpacing: '1px', marginTop: 2 }}>OFFICIAL RECEIPT</div>
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: '16px' }} onClick={() => setReceiptInvoice(null)}>
+            <style>{`
+              @media print {
+                body * { visibility: hidden !important; }
+                #printable-receipt, #printable-receipt * { visibility: visible !important; }
+                #printable-receipt {
+                  position: fixed !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  margin: 0 !important;
+                  padding: 20px 24px !important;
+                  box-shadow: none !important;
+                  border: none !important;
+                  background: #ffffff !important;
+                  -webkit-print-color-adjust: exact !important;
+                  print-color-adjust: exact !important;
+                }
+                .no-print { display: none !important; }
+              }
+            `}</style>
+
+            {/* Modal Controls Bar */}
+            <div className="no-print" style={{ width: '100%', maxWidth: '700px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }} onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.95rem' }}>Receipt Preview</span>
+                <span style={{ fontSize: '0.72rem', background: 'rgba(16,185,129,0.2)', color: '#10b981', border: '1px solid #10b981', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                  Size: ~14 KB (&lt; 50 KB Guarantee)
+                </span>
               </div>
-
-              {/* Receipt Body */}
-              <div style={{ padding: '1.5rem', color: '#1a1a1a' }}>
-                {/* Invoice meta */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '2px dashed #e5e7eb' }}>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Invoice No.</div>
-                    <div style={{ fontWeight: 800, color: '#d4af37', fontSize: '1rem', marginTop: 2 }}>{inv.id}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date</div>
-                    <div style={{ fontWeight: 700, color: '#1a1a1a', fontSize: '0.9rem', marginTop: 2 }}>
-                      {new Date(inv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Customer info */}
-                <div style={{ backgroundColor: '#f9fafb', borderRadius: '10px', padding: '0.9rem 1rem', marginBottom: '1.25rem' }}>
-                  <div style={{ fontSize: '0.68rem', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.4rem' }}>Bill To</div>
-                  <div style={{ fontWeight: 700, fontSize: '1rem', color: '#111827' }}>{inv.customer}</div>
-                  <div style={{ fontSize: '0.82rem', color: '#6b7280', marginTop: 2 }}>{inv.phone}</div>
-                </div>
-
-                {/* Service row */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <th style={{ textAlign: 'left', fontSize: '0.68rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', paddingBottom: '0.4rem' }}>Service / Product</th>
-                      <th style={{ textAlign: 'right', fontSize: '0.68rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', paddingBottom: '0.4rem' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td style={{ padding: '0.75rem 0', fontSize: '0.9rem', color: '#111827', fontWeight: 500 }}>{inv.service}</td>
-                      <td style={{ padding: '0.75rem 0', textAlign: 'right', fontWeight: 700, color: '#111827' }}>₹{baseAmt.toLocaleString('en-IN')}</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Calculations */}
-                <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '0.75rem' }}>
-                  {inv.discount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', color: '#10b981', marginBottom: '0.4rem' }}>
-                      <span>Discount ({inv.discount}%)</span>
-                      <span>− ₹{discountAmt.toLocaleString('en-IN')}</span>
-                    </div>
-                  )}
-                  {inv.gst > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.83rem', color: '#3b82f6', marginBottom: '0.4rem' }}>
-                      <span>GST ({inv.gst}%)</span>
-                      <span>+ ₹{gstAmt.toLocaleString('en-IN')}</span>
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.6rem', paddingTop: '0.6rem', borderTop: '2px solid #111827' }}>
-                    <span style={{ fontSize: '1rem', fontWeight: 800, color: '#111827' }}>GRAND TOTAL</span>
-                    <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#d4af37' }}>₹{grandTotal.toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-
-                {/* Payment info */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1rem', backgroundColor: inv.status === 'PAID' ? '#ecfdf5' : '#fff7ed', borderRadius: '8px', padding: '0.65rem 1rem' }}>
-                  <div>
-                    <div style={{ fontSize: '0.68rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Mode</div>
-                    <div style={{ fontWeight: 700, color: '#111827', marginTop: 2 }}>{inv.mode}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '0.68rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</div>
-                    <div style={{ fontWeight: 800, marginTop: 2, color: inv.status === 'PAID' ? '#10b981' : '#f59e0b', fontSize: '0.9rem' }}>
-                      {inv.status === 'PAID' ? '✓ PAID' : '⏳ PENDING'}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer */}
-                <div style={{ textAlign: 'center', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px dashed #e5e7eb' }}>
-                  <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>Thank you for visiting <strong>New Duke & Duchess</strong></div>
-                  <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 4 }}>This is a computer-generated receipt</div>
-                </div>
-
-                {/* Print button */}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={handleDownloadHtml}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#2563eb', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  <Download size={14} /> Download (&lt;50KB)
+                </button>
                 <button
                   onClick={() => { if (typeof window !== 'undefined') window.print(); }}
-                  style={{ width: '100%', marginTop: '1.25rem', padding: '0.75rem', borderRadius: '10px', border: 'none', background: 'linear-gradient(135deg,#d4af37,#f3cf55)', color: '#000', fontWeight: 800, fontSize: '0.95rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'linear-gradient(135deg,#d4af37,#c5a028)', color: '#000', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}
                 >
-                  <Printer size={18} /> Print Receipt
+                  <Printer size={14} /> Print / Save PDF
                 </button>
+                <button
+                  onClick={() => setReceiptInvoice(null)}
+                  style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', width: '30px', height: '30px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Receipt Paper Card */}
+            <div id="printable-receipt" style={{ backgroundColor: '#ffffff', borderRadius: '6px', width: '100%', maxWidth: '700px', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.6)', padding: '28px 36px 0 36px', color: '#111', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }} onClick={e => e.stopPropagation()}>
+              
+              {/* Top Shield Emblem Badge */}
+              <div style={{ width: '82px', height: '96px', background: '#0b0b0b', borderRadius: '6px 6px 14px 14px', margin: '0 auto 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #d4af37', padding: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.15)' }}>
+                <svg width="32" height="24" viewBox="0 0 40 30" fill="none">
+                  <path d="M20 2L24.5 10.5L34 5L30 22H10L6 5L15.5 10.5L20 2Z" fill="#d4af37" stroke="#f5d77f" strokeWidth="1"/>
+                  <circle cx="20" cy="2" r="2" fill="#fff"/>
+                  <circle cx="6" cy="5" r="1.5" fill="#fff"/>
+                  <circle cx="34" cy="5" r="1.5" fill="#fff"/>
+                  <rect x="8" y="24" width="24" height="3" rx="1.5" fill="#d4af37"/>
+                </svg>
+                <div style={{ fontSize: '7px', fontWeight: 800, color: '#d4af37', letterSpacing: '0.5px', fontFamily: '"Cinzel", "Times New Roman", serif', textAlign: 'center', lineHeight: 1.1, marginTop: '2px' }}>NEW DUKE &amp;</div>
+                <div style={{ fontSize: '7.5px', fontWeight: 800, color: '#d4af37', letterSpacing: '0.8px', fontFamily: '"Cinzel", "Times New Roman", serif', textAlign: 'center', lineHeight: 1.1 }}>DUCHESS</div>
+                <div style={{ fontSize: '5px', fontWeight: 600, color: '#f3cf55', letterSpacing: '0.5px', marginTop: '1px', textAlign: 'center' }}>UNISEX SALON</div>
+                <div style={{ fontSize: '8px', color: '#d4af37', lineHeight: 1, marginTop: '1px' }}>❦</div>
+              </div>
+
+              {/* Main Salon Title */}
+              <h1 style={{ fontFamily: '"Playfair Display", "Cinzel", "Times New Roman", serif', fontSize: '26px', fontWeight: 800, color: '#111', letterSpacing: '1.5px', textTransform: 'uppercase', margin: 0, textAlign: 'center' }}>
+                NEW DUKE &amp; DUCHESS
+              </h1>
+              
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', margin: '4px 0 10px' }}>
+                <span style={{ height: '1px', width: '35px', background: '#b8973d' }}></span>
+                <span style={{ fontSize: '11px', fontWeight: 600, color: '#b8973d', letterSpacing: '4px', textTransform: 'uppercase' }}>UNISEX SALON</span>
+                <span style={{ height: '1px', width: '35px', background: '#b8973d' }}></span>
+              </div>
+
+              {/* Address & Contact */}
+              <div style={{ fontSize: '11.5px', color: '#4b5563', textAlign: 'center', maxWidth: '500px', margin: '0 auto', lineHeight: 1.45 }}>
+                📍 07, Krishna Garden Main Rd, Near New Happy Home, Balarama Layout, Rajarajeshwari Nagar, Bengaluru, Karnataka 560098
+              </div>
+              <div style={{ fontSize: '12px', color: '#111', fontWeight: 600, textAlign: 'center', marginTop: '4px' }}>
+                📞 +91 89047 10353
+              </div>
+
+              {/* Invoice Details & Bill To (2-column box) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', border: '1px solid #e8e3d5', borderTop: '3px solid #b8973d', borderRadius: '4px', padding: '12px 18px', marginTop: '16px', backgroundColor: '#fff' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#b8973d', letterSpacing: '0.8px', marginBottom: '8px' }}>📄 INVOICE DETAILS</div>
+                  <div style={{ fontSize: '12px', color: '#374151', lineHeight: 1.7 }}>
+                    <div>Invoice No. &nbsp;&nbsp;&nbsp;&nbsp;: <strong style={{ color: '#111' }}>{inv.id}</strong></div>
+                    <div>Date &amp; Time &nbsp;&nbsp;&nbsp;: <strong style={{ color: '#111' }}>{dateTimeStr}</strong></div>
+                    <div>Payment Mode : <strong style={{ color: '#111', textTransform: 'uppercase' }}>{inv.mode}</strong></div>
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#b8973d', letterSpacing: '0.8px', marginBottom: '8px' }}>👤 BILL TO</div>
+                  <div style={{ fontSize: '16px', fontWeight: 700, color: '#111', textTransform: 'capitalize' }}>{inv.customer || 'Walk-in Client'}</div>
+                  <div style={{ fontSize: '12.5px', color: '#4b5563', marginTop: '5px' }}>📞 {inv.phone || 'N/A'}</div>
+                </div>
+              </div>
+
+              {/* Services Section Header */}
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#b8973d', letterSpacing: '1px', marginTop: '18px', marginBottom: '6px' }}>✂️ SERVICES</div>
+
+              {/* Services Table */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ background: '#000', color: '#b8973d' }}>
+                    <th style={{ textAlign: 'left', padding: '7px 10px', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px' }}>DESCRIPTION</th>
+                    <th style={{ textAlign: 'center', padding: '7px 10px', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px', width: '70px' }}>STYLIST</th>
+                    <th style={{ textAlign: 'center', padding: '7px 10px', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px', width: '60px' }}>QTY</th>
+                    <th style={{ textAlign: 'right', padding: '7px 10px', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px', width: '85px' }}>RATE (₹)</th>
+                    <th style={{ textAlign: 'right', padding: '7px 10px', fontSize: '10.5px', fontWeight: 700, letterSpacing: '0.5px', width: '95px' }}>AMOUNT (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemsList.map((item, idx) => (
+                    <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 600, color: '#111' }}>{item.name}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#555' }}>{item.stylist || '-'}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center', color: '#111' }}>{item.qty}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', color: '#111' }}>{Number(item.rate).toFixed(2)}</td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#111' }}>{Number(item.amount).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Subtotal, Tax and Total Payable */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <div style={{ width: '250px' }}>
+                  <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '12px', color: '#374151', padding: '4px 6px', borderTop: '1px solid #e5e7eb' }}>
+                    <span>Subtotal</span>
+                    <strong>₹{subtotal.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '12px', color: '#374151', padding: '4px 6px' }}>
+                    <span>Tax (GST)</span>
+                    <strong>₹{taxAmt.toFixed(2)}</strong>
+                  </div>
+                  <div style={{ background: '#000', color: '#b8973d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', marginTop: '4px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>TOTAL PAYABLE</span>
+                    <span style={{ fontSize: '20px', fontWeight: 800, color: '#b8973d' }}>₹ {totalPayable.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Successful Badge */}
+              <div style={{ border: '1.5px solid #d4af37', borderRadius: '4px', background: '#fffcf4', padding: '9px 12px', marginTop: '14px', textAlign: 'center', fontSize: '12px', color: '#1f2937' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '16px', height: '16px', borderRadius: '50%', background: '#b8973d', color: '#fff', fontSize: '10px', fontWeight: 'bold', marginRight: '6px' }}>✓</span>
+                <strong>PAYMENT SUCCESSFUL</strong> &nbsp;|&nbsp; Paid via {inv.mode} &nbsp; Thank you for your payment.
+              </div>
+
+              {/* Footer Columns */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.9fr 1.6fr', gap: '12px', alignItems: 'center', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #ede8dc' }}>
+                {/* Column 1: Review & QR */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <svg width="60" height="60" viewBox="0 0 33 33" fill="#111" style={{ flexShrink: 0 }}>
+                    <rect x="0" y="0" width="7" height="7" fill="#111"/>
+                    <rect x="1" y="1" width="5" height="5" fill="#fff"/>
+                    <rect x="2" y="2" width="3" height="3" fill="#111"/>
+                    <rect x="26" y="0" width="7" height="7" fill="#111"/>
+                    <rect x="27" y="1" width="5" height="5" fill="#fff"/>
+                    <rect x="28" y="2" width="3" height="3" fill="#111"/>
+                    <rect x="0" y="26" width="7" height="7" fill="#111"/>
+                    <rect x="1" y="27" width="5" height="5" fill="#fff"/>
+                    <rect x="2" y="28" width="3" height="3" fill="#111"/>
+                    <rect x="9" y="2" width="2" height="2"/>
+                    <rect x="13" y="2" width="3" height="2"/>
+                    <rect x="18" y="2" width="2" height="2"/>
+                    <rect x="22" y="2" width="2" height="2"/>
+                    <rect x="10" y="6" width="3" height="2"/>
+                    <rect x="16" y="6" width="2" height="2"/>
+                    <rect x="20" y="6" width="4" height="2"/>
+                    <rect x="2" y="9" width="3" height="2"/>
+                    <rect x="8" y="10" width="2" height="3"/>
+                    <rect x="12" y="10" width="3" height="2"/>
+                    <rect x="17" y="9" width="3" height="3"/>
+                    <rect x="22" y="10" width="2" height="2"/>
+                    <rect x="26" y="9" width="5" height="2"/>
+                    <rect x="4" y="14" width="3" height="2"/>
+                    <rect x="10" y="14" width="2" height="4"/>
+                    <rect x="14" y="14" width="4" height="4"/>
+                    <rect x="20" y="14" width="3" height="2"/>
+                    <rect x="25" y="14" width="4" height="2"/>
+                    <rect x="1" y="18" width="4" height="2"/>
+                    <rect x="7" y="18" width="3" height="2"/>
+                    <rect x="12" y="19" width="2" height="3"/>
+                    <rect x="17" y="19" width="3" height="2"/>
+                    <rect x="22" y="18" width="2" height="3"/>
+                    <rect x="27" y="18" width="3" height="2"/>
+                    <rect x="9" y="24" width="2" height="2"/>
+                    <rect x="13" y="24" width="4" height="2"/>
+                    <rect x="19" y="23" width="2" height="3"/>
+                    <rect x="23" y="24" width="3" height="2"/>
+                    <rect x="28" y="24" width="3" height="2"/>
+                    <rect x="9" y="28" width="4" height="2"/>
+                    <rect x="15" y="28" width="2" height="3"/>
+                    <rect x="19" y="28" width="4" height="2"/>
+                    <rect x="25" y="28" width="2" height="2"/>
+                    <rect x="29" y="28" width="3" height="2"/>
+                  </svg>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: '#b8973d', letterSpacing: '0.5px' }}>LOVE OUR SERVICE?</div>
+                    <div style={{ fontSize: '9px', color: '#555', marginTop: '2px' }}>Scan to leave us a Google Review</div>
+                    <div style={{ color: '#d4af37', fontSize: '11px', marginTop: '3px', letterSpacing: '1px' }}>★★★★★</div>
+                  </div>
+                </div>
+                
+                {/* Column 2: Follow Us */}
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: '#b8973d', letterSpacing: '0.5px', marginBottom: '6px' }}>FOLLOW US</div>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                    <span style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+                        <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+                        <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+                      </svg>
+                    </span>
+                    <span style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff">
+                        <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/>
+                      </svg>
+                    </span>
+                    <span style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#000', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff">
+                        <path d="M20.5 3.5A11.9 11.9 0 0 0 12 0C5.4 0 0 5.4 0 12c0 2.1.5 4.1 1.6 5.9L0 24l6.3-1.6c1.7 1 3.7 1.6 5.7 1.6 6.6 0 12-5.4 12-12 0-3.2-1.3-6.2-3.5-8.5zM12 22c-1.8 0-3.6-.5-5.1-1.4l-.4-.2-3.8 1 1-3.7-.2-.4C2.5 15.8 2 13.9 2 12c0-5.5 4.5-10 10-10s10 4.5 10 10-4.5 10-10 10zm5.5-7.5c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.4-.5-2.6-1.6-.9-.8-1.6-1.9-1.8-2.2-.2-.3 0-.5.1-.7.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4-.1-.5-.1-.1-.7-1.7-1-2.3-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.6.1-.9.4-.3.4-1.2 1.2-1.2 2.9 0 1.7 1.2 3.3 1.4 3.6.2.2 2.4 3.7 5.9 5.2.8.4 1.5.6 2 .7.8.3 1.6.2 2.2.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.6.2-1.7-.1-.2-.3-.3-.6-.5z"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Column 3: Thank you */}
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: '"Brush Script MT", "Segoe Script", cursive', fontSize: '24px', color: '#b8973d', lineHeight: 1 }}>Thank You! ♡</div>
+                  <div style={{ fontSize: '9.5px', color: '#555', lineHeight: 1.35, marginTop: '4px' }}>
+                    Thank you for joining the New Duke &amp; Duchess family ❤️ We truly appreciate your support and look forward to seeing you again! ⭐
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Ribbon */}
+              <div style={{ background: '#000', color: '#b8973d', padding: '7px 0', textAlign: 'center', fontSize: '9.5px', fontWeight: 600, letterSpacing: '3px', textTransform: 'uppercase', marginTop: '16px', marginLeft: '-36px', marginRight: '-36px' }}>
+                ♥ &nbsp;&nbsp;&nbsp; STYLE IS A REFLECTION OF YOUR ATTITUDE &nbsp;&nbsp;&nbsp; ♥
               </div>
             </div>
           </div>
