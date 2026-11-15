@@ -179,10 +179,10 @@ function generateReceiptHtmlString(inv: Invoice) {
 
     <!-- Address & Contact -->
     <div style="font-size: 11.5px; color: #4b5563; text-align: center; max-width: 500px; margin: 0 auto; line-height: 1.45;">
-      📍 07, Krishna Garden Main Rd, Near New Happy Home, Balarama Layout, Rajarajeshwari Nagar, Bengaluru, Karnataka 560098
+      📍 1st Floor, Abhiman Arcade, Muddenapalya, Main Rd, near Ayodhya Samrat Hotel, Srigandada Kaval, Nagarbhavi, Bengaluru, Karnataka 560072
     </div>
     <div style="font-size: 12px; color: #111; font-weight: 600; text-align: center; margin-top: 4px;">
-      📞 +91 89047 10353
+      📞 +91 88610 22242
     </div>
 
     <!-- Invoice Details & Bill To -->
@@ -404,8 +404,8 @@ Tax (GST): ₹${taxAmt.toFixed(2)}
 ━━━━━━━━━━━━━━━━━━━━
 ✅ *Payment Status:* SUCCESSFUL
 
-📍 07, Krishna Garden Main Rd, Near New Happy Home, RR Nagar, Bengaluru - 560098
-📞 Contact: +91 89047 10353
+📍 1st Floor, Abhiman Arcade, Muddenapalya, Main Rd, near Ayodhya Samrat Hotel, Srigandada Kaval, Nagarbhavi, Bengaluru, Karnataka 560072
+📞 Contact: +91 88610 22242
 
 Thank you for visiting the New Duke & Duchess family! ❤️
 We truly appreciate your support and look forward to seeing you again! ⭐
@@ -2292,10 +2292,10 @@ export default function DukeDuchessBillingApp() {
 
               {/* Address & Contact */}
               <div style={{ fontSize: '11.5px', color: '#4b5563', textAlign: 'center', maxWidth: '500px', margin: '0 auto', lineHeight: 1.45 }}>
-                📍 07, Krishna Garden Main Rd, Near New Happy Home, Balarama Layout, Rajarajeshwari Nagar, Bengaluru, Karnataka 560098
+                📍 1st Floor, Abhiman Arcade, Muddenapalya, Main Rd, near Ayodhya Samrat Hotel, Srigandada Kaval, Nagarbhavi, Bengaluru, Karnataka 560072
               </div>
               <div style={{ fontSize: '12px', color: '#111', fontWeight: 600, textAlign: 'center', marginTop: '4px' }}>
-                📞 +91 89047 10353
+                📞 +91 88610 22242
               </div>
 
               {/* Invoice Details & Bill To (2-column box) */}
