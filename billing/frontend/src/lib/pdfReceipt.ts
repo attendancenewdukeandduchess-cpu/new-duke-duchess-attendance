@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SALON_LOGO_DATA_URI } from '@/app/logoDataUri';
+import { QR_REVIEW_DATA_URI } from '@/app/qrReviewDataUri';
 
 export type InvoiceItem = {
   name: string;
@@ -120,7 +121,7 @@ export function formatReceiptDateTime(dateStr?: string) {
 /**
  * Creates a pixel-perfect, professionally aligned vector PDF invoice
  * matching the New Duke & Duchess luxury salon brand aesthetics.
- * Strictly under 30KB (< 50KB guarantee).
+ * Strictly under 35KB (< 50KB guarantee).
  */
 export function createInvoicePdfDoc(inv: Invoice): jsPDF {
   const fin = computeInvoiceFinancials(inv);
@@ -137,12 +138,12 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
   const contentWidth = pageWidth - (margin * 2); // 182mm
   let y = 10;
 
-  // 1. Logo (Centered)
+  // 1. Logo (Centered with generous 7.5mm margin to eliminate any text overlap)
   if (SALON_LOGO_DATA_URI) {
     const logoW = 24;
-    const logoH = 26;
+    const logoH = 24;
     doc.addImage(SALON_LOGO_DATA_URI, 'JPEG', (pageWidth - logoW) / 2, y, logoW, logoH);
-    y += logoH + 4;
+    y += logoH + 7.5;
   }
 
   // 2. Salon Title
@@ -150,7 +151,7 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
   doc.setFontSize(17);
   doc.setTextColor(17, 17, 17);
   doc.text('NEW DUKE & DUCHESS', pageWidth / 2, y, { align: 'center' });
-  y += 5;
+  y += 5.5;
 
   // 3. Unisex Salon Tagline with Gold Decorative Lines
   doc.setFontSize(8.5);
@@ -317,6 +318,7 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
   y = finalTableY + 4;
 
   // 8. TOTALS SUMMARY TABLE (Right-Aligned, matching table's right margin)
+  // Kept only GST, removed CGST & SGST as requested
   const totalsBoxWidth = 85;
   const totalsBoxX = margin + contentWidth - totalsBoxWidth;
 
@@ -330,11 +332,10 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
     totalsRows.push(['Taxable Amount', 'Rs. ' + fin.taxableAmt.toFixed(2)]);
   }
 
-  if (fin.gstRate > 0 && fin.taxAmt > 0) {
-    totalsRows.push([`CGST (${fin.cgstRate}%)`, 'Rs. ' + fin.cgstAmt.toFixed(2)]);
-    totalsRows.push([`SGST (${fin.sgstRate}%)`, 'Rs. ' + fin.sgstAmt.toFixed(2)]);
-  } else if (fin.taxAmt > 0) {
-    totalsRows.push(['Tax (GST)', 'Rs. ' + fin.taxAmt.toFixed(2)]);
+  // Only GST (No CGST / SGST)
+  if (fin.taxAmt > 0 || fin.gstRate > 0) {
+    const gstLabel = `Tax (GST ${fin.gstRate > 0 ? `${fin.gstRate}%` : ''})`.trim();
+    totalsRows.push([gstLabel, 'Rs. ' + fin.taxAmt.toFixed(2)]);
   }
 
   autoTable(doc, {
@@ -398,28 +399,48 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
 
   y += 14;
 
-  // 10. LUXURY 3-COLUMN FOOTER
+  // 10. LUXURY 3-COLUMN FOOTER WITH GOOGLE REVIEWS QR CODE
   doc.setDrawColor(230, 225, 215);
   doc.setLineWidth(0.4);
   doc.line(margin, y, margin + contentWidth, y);
   y += 5;
 
-  // Left Column: Review message
+  // Left Column: Google Reviews QR Code Image & Message
   const fCol1 = margin;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(7.5);
-  doc.setTextColor(184, 151, 61);
-  doc.text('LOVE OUR SERVICE?', fCol1, y + 3);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(100, 100, 100);
-  doc.text('Scan & leave us a Google Review', fCol1, y + 7);
-  doc.setTextColor(234, 179, 8); // Gold stars
-  doc.setFontSize(8);
-  doc.text('[ * * * * * ]', fCol1, y + 11.5);
+  if (QR_REVIEW_DATA_URI) {
+    const qrSize = 17; // 17mm x 17mm square QR code
+    doc.addImage(QR_REVIEW_DATA_URI, 'JPEG', fCol1, y, qrSize, qrSize);
+
+    const qrTextX = fCol1 + qrSize + 3;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(184, 151, 61);
+    doc.text('LOVE OUR SERVICE?', qrTextX, y + 4);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(90, 90, 90);
+    doc.text('Scan for Google Review', qrTextX, y + 8.5);
+
+    doc.setTextColor(234, 179, 8); // Gold 5 stars
+    doc.setFontSize(8);
+    doc.text('* * * * *', qrTextX, y + 13.5);
+  } else {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(184, 151, 61);
+    doc.text('LOVE OUR SERVICE?', fCol1, y + 3);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text('Scan & leave us a Google Review', fCol1, y + 7);
+    doc.setTextColor(234, 179, 8);
+    doc.setFontSize(8);
+    doc.text('* * * * *', fCol1, y + 11.5);
+  }
 
   // Center Column: Follow us
-  const fCol2 = margin + (contentWidth / 2);
+  const fCol2 = margin + (contentWidth / 2) + 6;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(184, 151, 61);
@@ -442,7 +463,7 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
   doc.text('Thank you for visiting the New Duke & Duchess family.', fCol3, y + 7, { align: 'right' });
   doc.text('We truly appreciate your support & look forward to seeing you again!', fCol3, y + 10.5, { align: 'right' });
 
-  y += 16;
+  y += 18;
 
   // 11. BOTTOM BLACK BANNER: STYLE IS A REFLECTION OF YOUR ATTITUDE
   doc.setFillColor(17, 17, 17);

@@ -226,7 +226,7 @@ function generateReceiptHtmlString(inv: Invoice) {
 <body>
   <div class="receipt-card">
     <!-- Top Emblem Badge -->
-    <div style="text-align: center; margin: 0 auto 12px;">
+    <div style="text-align: center; margin: 0 auto 18px;">
       <img src="${SALON_LOGO_DATA_URI}" alt="New Duke &amp; Duchess" style="width: 82px; height: 88px; object-fit: contain; border-radius: 8px; border: 1.5px solid #d4af37; box-shadow: 0 4px 10px rgba(0,0,0,0.15); background: #000; display: inline-block;" />
     </div>
 
@@ -304,16 +304,6 @@ function generateReceiptHtmlString(inv: Invoice) {
           <span>Tax (GST ${fin.gstRate > 0 ? `${fin.gstRate}%` : ''})</span>
           <strong>₹${fin.taxAmt.toFixed(2)}</strong>
         </div>
-        ${fin.gstRate > 0 ? `
-        <div style="display: flex; justify-content: space-between; font-size: 10.5px; color: #6b7280; padding: 1px 6px 2px 14px;">
-          <span>CGST (${fin.cgstRate}%)</span>
-          <span>₹${fin.cgstAmt.toFixed(2)}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; font-size: 10.5px; color: #6b7280; padding: 1px 6px 3px 14px;">
-          <span>SGST (${fin.sgstRate}%)</span>
-          <span>₹${fin.sgstAmt.toFixed(2)}</span>
-        </div>
-        ` : ''}
         <div style="background: #000; color: #b8973d; display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; margin-top: 4px;">
           <span style="font-size: 11px; font-weight: 700; letter-spacing: 1px;">TOTAL PAYABLE</span>
           <span style="font-size: 20px; font-weight: 800; color: #b8973d;">₹ ${fin.totalPayable.toFixed(2)}</span>
@@ -331,51 +321,7 @@ function generateReceiptHtmlString(inv: Invoice) {
     <div style="display: grid; grid-template-columns: 1.2fr 0.9fr 1.6fr; gap: 12px; align-items: center; margin-top: 18px; padding-top: 16px; border-top: 1px solid #ede8dc;">
       <!-- Column 1: Review & QR -->
       <div style="display: flex; align-items: center; gap: 10px;">
-        <svg width="60" height="60" viewBox="0 0 33 33" fill="#111" style="flex-shrink: 0;">
-          <rect x="0" y="0" width="7" height="7" fill="#111"/>
-          <rect x="1" y="1" width="5" height="5" fill="#fff"/>
-          <rect x="2" y="2" width="3" height="3" fill="#111"/>
-          <rect x="26" y="0" width="7" height="7" fill="#111"/>
-          <rect x="27" y="1" width="5" height="5" fill="#fff"/>
-          <rect x="28" y="2" width="3" height="3" fill="#111"/>
-          <rect x="0" y="26" width="7" height="7" fill="#111"/>
-          <rect x="1" y="27" width="5" height="5" fill="#fff"/>
-          <rect x="2" y="28" width="3" height="3" fill="#111"/>
-          <rect x="9" y="2" width="2" height="2"/>
-          <rect x="13" y="2" width="3" height="2"/>
-          <rect x="18" y="2" width="2" height="2"/>
-          <rect x="22" y="2" width="2" height="2"/>
-          <rect x="10" y="6" width="3" height="2"/>
-          <rect x="16" y="6" width="2" height="2"/>
-          <rect x="20" y="6" width="4" height="2"/>
-          <rect x="2" y="9" width="3" height="2"/>
-          <rect x="8" y="10" width="2" height="3"/>
-          <rect x="12" y="10" width="3" height="2"/>
-          <rect x="17" y="9" width="3" height="3"/>
-          <rect x="22" y="10" width="2" height="2"/>
-          <rect x="26" y="9" width="5" height="2"/>
-          <rect x="4" y="14" width="3" height="2"/>
-          <rect x="10" y="14" width="2" height="4"/>
-          <rect x="14" y="14" width="4" height="4"/>
-          <rect x="20" y="14" width="3" height="2"/>
-          <rect x="25" y="14" width="4" height="2"/>
-          <rect x="1" y="18" width="4" height="2"/>
-          <rect x="7" y="18" width="3" height="2"/>
-          <rect x="12" y="19" width="2" height="3"/>
-          <rect x="17" y="19" width="3" height="2"/>
-          <rect x="22" y="18" width="2" height="3"/>
-          <rect x="27" y="18" width="3" height="2"/>
-          <rect x="9" y="24" width="2" height="2"/>
-          <rect x="13" y="24" width="4" height="2"/>
-          <rect x="19" y="23" width="2" height="3"/>
-          <rect x="23" y="24" width="3" height="2"/>
-          <rect x="28" y="24" width="3" height="2"/>
-          <rect x="9" y="28" width="4" height="2"/>
-          <rect x="15" y="28" width="2" height="3"/>
-          <rect x="19" y="28" width="4" height="2"/>
-          <rect x="25" y="28" width="2" height="2"/>
-          <rect x="29" y="28" width="3" height="2"/>
-        </svg>
+        <img src="/qr-review.jpg" alt="Google Review QR" style="width: 58px; height: 58px; object-fit: contain; border-radius: 4px; border: 1px solid #d4af37; flex-shrink: 0;" />
         <div>
           <div style="font-size: 10px; font-weight: 700; color: #b8973d; letter-spacing: 0.5px;">LOVE OUR SERVICE?</div>
           <div style="font-size: 9px; color: #555; margin-top: 2px;">Scan to leave us a Google Review</div>
@@ -462,8 +408,8 @@ function generateWhatsAppReceiptMessage(inv: Invoice) {
     ? `Discount${fin.discountPercent > 0 ? ` (${fin.discountPercent}%)` : ''}: -₹${fin.discountAmt.toFixed(2)}\nTaxable Amount: ₹${fin.taxableAmt.toFixed(2)}\n`
     : '';
 
-  const gstLines = fin.gstRate > 0
-    ? `Tax (GST ${fin.gstRate}%): ₹${fin.taxAmt.toFixed(2)}\n  • CGST (${fin.cgstRate}%): ₹${fin.cgstAmt.toFixed(2)}\n  • SGST (${fin.sgstRate}%): ₹${fin.sgstAmt.toFixed(2)}`
+  const gstLine = fin.gstRate > 0
+    ? `Tax (GST ${fin.gstRate}%): ₹${fin.taxAmt.toFixed(2)}`
     : `Tax (GST): ₹0.00`;
 
   return `✨ *NEW DUKE & DUCHESS UNISEX SALON* ✨
@@ -481,7 +427,7 @@ ${itemsText}
 
 ━━━━━━━━━━━━━━━━━━━━
 Subtotal: ₹${fin.grossSubtotal.toFixed(2)}
-${discountLine}${gstLines}
+${discountLine}${gstLine}
 *TOTAL PAID: ₹${fin.totalPayable.toFixed(2)}*
 ━━━━━━━━━━━━━━━━━━━━
 ✅ *Payment Status:* SUCCESSFUL
@@ -2632,7 +2578,7 @@ export default function DukeDuchessBillingApp() {
             <div id="printable-receipt" style={{ backgroundColor: '#ffffff', borderRadius: '6px', width: '100%', maxWidth: '700px', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.6)', padding: '28px 36px 0 36px', color: '#111', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }} onClick={e => e.stopPropagation()}>
               
               {/* Top Shield Emblem Badge */}
-              <div style={{ textAlign: 'center', margin: '0 auto 12px' }}>
+              <div style={{ textAlign: 'center', margin: '0 auto 18px' }}>
                 <img src="/logo.png" alt="New Duke &amp; Duchess" style={{ width: '82px', height: '88px', objectFit: 'contain', borderRadius: '8px', border: '1.5px solid #d4af37', boxShadow: '0 4px 10px rgba(0,0,0,0.15)', background: '#000', display: 'inline-block' }} />
               </div>
 
@@ -2722,18 +2668,6 @@ export default function DukeDuchessBillingApp() {
                     <span>Tax (GST {fin.gstRate > 0 ? `${fin.gstRate}%` : ''})</span>
                     <strong>₹{fin.taxAmt.toFixed(2)}</strong>
                   </div>
-                  {fin.gstRate > 0 && (
-                    <>
-                      <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '10.5px', color: '#6b7280', padding: '1px 6px 2px 14px' }}>
-                        <span>CGST ({fin.cgstRate}%)</span>
-                        <span>₹{fin.cgstAmt.toFixed(2)}</span>
-                      </div>
-                      <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', fontSize: '10.5px', color: '#6b7280', padding: '1px 6px 3px 14px' }}>
-                        <span>SGST ({fin.sgstRate}%)</span>
-                        <span>₹{fin.sgstAmt.toFixed(2)}</span>
-                      </div>
-                    </>
-                  )}
                   <div style={{ background: '#000', color: '#b8973d', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', marginTop: '4px' }}>
                     <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px' }}>TOTAL PAYABLE</span>
                     <span style={{ fontSize: '20px', fontWeight: 800, color: '#b8973d' }}>₹ {fin.totalPayable.toFixed(2)}</span>
@@ -2751,51 +2685,7 @@ export default function DukeDuchessBillingApp() {
               <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.9fr 1.6fr', gap: '12px', alignItems: 'center', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid #ede8dc' }}>
                 {/* Column 1: Review & QR */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <svg width="60" height="60" viewBox="0 0 33 33" fill="#111" style={{ flexShrink: 0 }}>
-                    <rect x="0" y="0" width="7" height="7" fill="#111"/>
-                    <rect x="1" y="1" width="5" height="5" fill="#fff"/>
-                    <rect x="2" y="2" width="3" height="3" fill="#111"/>
-                    <rect x="26" y="0" width="7" height="7" fill="#111"/>
-                    <rect x="27" y="1" width="5" height="5" fill="#fff"/>
-                    <rect x="28" y="2" width="3" height="3" fill="#111"/>
-                    <rect x="0" y="26" width="7" height="7" fill="#111"/>
-                    <rect x="1" y="27" width="5" height="5" fill="#fff"/>
-                    <rect x="2" y="28" width="3" height="3" fill="#111"/>
-                    <rect x="9" y="2" width="2" height="2"/>
-                    <rect x="13" y="2" width="3" height="2"/>
-                    <rect x="18" y="2" width="2" height="2"/>
-                    <rect x="22" y="2" width="2" height="2"/>
-                    <rect x="10" y="6" width="3" height="2"/>
-                    <rect x="16" y="6" width="2" height="2"/>
-                    <rect x="20" y="6" width="4" height="2"/>
-                    <rect x="2" y="9" width="3" height="2"/>
-                    <rect x="8" y="10" width="2" height="3"/>
-                    <rect x="12" y="10" width="3" height="2"/>
-                    <rect x="17" y="9" width="3" height="3"/>
-                    <rect x="22" y="10" width="2" height="2"/>
-                    <rect x="26" y="9" width="5" height="2"/>
-                    <rect x="4" y="14" width="3" height="2"/>
-                    <rect x="10" y="14" width="2" height="4"/>
-                    <rect x="14" y="14" width="4" height="4"/>
-                    <rect x="20" y="14" width="3" height="2"/>
-                    <rect x="25" y="14" width="4" height="2"/>
-                    <rect x="1" y="18" width="4" height="2"/>
-                    <rect x="7" y="18" width="3" height="2"/>
-                    <rect x="12" y="19" width="2" height="3"/>
-                    <rect x="17" y="19" width="3" height="2"/>
-                    <rect x="22" y="18" width="2" height="3"/>
-                    <rect x="27" y="18" width="3" height="2"/>
-                    <rect x="9" y="24" width="2" height="2"/>
-                    <rect x="13" y="24" width="4" height="2"/>
-                    <rect x="19" y="23" width="2" height="3"/>
-                    <rect x="23" y="24" width="3" height="2"/>
-                    <rect x="28" y="24" width="3" height="2"/>
-                    <rect x="9" y="28" width="4" height="2"/>
-                    <rect x="15" y="28" width="2" height="3"/>
-                    <rect x="19" y="28" width="4" height="2"/>
-                    <rect x="25" y="28" width="2" height="2"/>
-                    <rect x="29" y="28" width="3" height="2"/>
-                  </svg>
+                  <img src="/qr-review.jpg" alt="Google Review QR" style={{ width: '58px', height: '58px', objectFit: 'contain', borderRadius: '4px', border: '1px solid #d4af37', flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: '10px', fontWeight: 700, color: '#b8973d', letterSpacing: '0.5px' }}>LOVE OUR SERVICE?</div>
                     <div style={{ fontSize: '9px', color: '#555', marginTop: '2px' }}>Scan to leave us a Google Review</div>
