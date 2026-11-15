@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/mongodb';
 
+const FILTER = { key: 'main' };
+
 // GET  → return full catalogue { menSections, womenSections, productItems }
 export async function GET() {
   try {
     const db = await getDb();
-    const doc = await db.collection('catalogue').findOne({ _id: 'main' });
+    const doc = await db.collection('catalogue').findOne(FILTER);
     if (!doc) return NextResponse.json({ menSections: null, womenSections: null, productItems: null });
     return NextResponse.json({
       menSections: doc.menSections ?? null,
@@ -23,7 +25,7 @@ export async function PUT(req: Request) {
     const db = await getDb();
     const body = await req.json();
     await db.collection('catalogue').updateOne(
-      { _id: 'main' },
+      FILTER,
       { $set: { menSections: body.menSections, womenSections: body.womenSections, productItems: body.productItems, updatedAt: new Date() } },
       { upsert: true }
     );
@@ -43,7 +45,7 @@ export async function PATCH(req: Request) {
     if (body.womenSections !== undefined) setObj.womenSections = body.womenSections;
     if (body.productItems !== undefined) setObj.productItems = body.productItems;
     await db.collection('catalogue').updateOne(
-      { _id: 'main' },
+      FILTER,
       { $set: setObj },
       { upsert: true }
     );
