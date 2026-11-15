@@ -439,29 +439,29 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
     doc.text('* * * * *', fCol1, y + 11.5);
   }
 
-  // Center Column: Follow us
-  const fCol2 = margin + (contentWidth / 2) + 6;
+  // Center Column: Follow us (Centered at true midpoint: 105mm)
+  const fCol2 = pageWidth / 2;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(184, 151, 61);
   doc.text('FOLLOW US', fCol2, y + 3, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7);
+  doc.setFontSize(6.5);
   doc.setTextColor(80, 80, 80);
   doc.text('@newdukeandduchess', fCol2, y + 7, { align: 'center' });
   doc.text('Instagram  |  Facebook  |  WhatsApp', fCol2, y + 11, { align: 'center' });
 
-  // Right Column: Thank You message
+  // Right Column: Thank You message (Right-aligned with clean margins)
   const fCol3 = margin + contentWidth;
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
+  doc.setFontSize(10.5);
   doc.setTextColor(184, 151, 61);
   doc.text('Thank You!', fCol3, y + 3, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(90, 90, 90);
-  doc.text('Thank you for visiting the New Duke & Duchess family.', fCol3, y + 7, { align: 'right' });
-  doc.text('We truly appreciate your support & look forward to seeing you again!', fCol3, y + 10.5, { align: 'right' });
+  doc.text('Thank you for visiting New Duke & Duchess.', fCol3, y + 7, { align: 'right' });
+  doc.text('We look forward to seeing you again!', fCol3, y + 11, { align: 'right' });
 
   y += 18;
 
