@@ -30,7 +30,12 @@ import {
   Percent,
   User,
   Phone,
-  MessageCircle
+  MessageCircle,
+  Calendar,
+  DollarSign,
+  FileSpreadsheet,
+  PieChart,
+  Award
 } from 'lucide-react';
 import { SALON_LOGO_DATA_URI } from './logoDataUri';
 
@@ -1081,6 +1086,11 @@ export default function DukeDuchessBillingApp() {
   const [posServiceTab, setPosServiceTab] = useState<'men' | 'women' | 'products'>('men');
   const [posSearch,     setPosSearch]     = useState('');
   const [billSuccess,   setBillSuccess]   = useState(false);
+
+  // ── Reports & Analytics State ──────────────────────────────────────────
+  const [reportRange, setReportRange] = useState<'all' | 'today' | '7days' | 'month' | 'custom'>('all');
+  const [reportFrom,  setReportFrom]  = useState('');
+  const [reportTo,    setReportTo]    = useState('');
 
   const addToCart = (item: { id: string; name: string; price: number }) => {
     setCartItems(prev => {
@@ -2269,15 +2279,581 @@ export default function DukeDuchessBillingApp() {
           );
         })()}
 
+        {/* ── REPORTS & ANALYTICS PAGE ── */}
+        {activeTab === 'reports' && (() => {
+          const now = new Date();
+          const todayStr = now.toISOString().slice(0, 10);
+
+          // Filter invoices according to selected reportRange
+          const filteredInvoices = invoices.filter(inv => {
+            if (reportRange === 'all') return true;
+            const invDate = (inv.date || '').slice(0, 10);
+            if (reportRange === 'today') {
+              return invDate === todayStr;
+            }
+            if (reportRange === '7days') {
+              const d7 = new Date();
+              d7.setDate(d7.getDate() - 7);
+              return invDate >= d7.toISOString().slice(0, 10);
+            }
+            if (reportRange === 'month') {
+              const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+              return invDate >= monthStart;
+            }
+            if (reportRange === 'custom') {
+              if (reportFrom && invDate < reportFrom) return false;
+              if (reportTo && invDate > reportTo) return false;
+              return true;
+            }
+            return true;
+          });
+
+          const paidInvoices = filteredInvoices.filter(i => i.status === 'PAID');
+          const totalRevenue = paidInvoices.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+          const totalBillsCount = filteredInvoices.length;
+          const avgBillValue = totalBillsCount > 0 ? Math.round(totalRevenue / totalBillsCount) : 0;
+
+          // GST and Discounts
+          let totalGstCollected = 0;
+          let totalDiscountsGiven = 0;
+          filteredInvoices.forEach(i => {
+            const fin = computeInvoiceFinancials(i);
+            totalGstCollected += fin.taxAmt;
+            totalDiscountsGiven += fin.discountAmt;
+          });
+          const totalCgst = Math.round((totalGstCollected / 2) * 100) / 100;
+          const totalSgst = Math.round((totalGstCollected / 2) * 100) / 100;
+
+          // Payment mode breakdown
+          const modeMap: Record<string, { count: number; amount: number; color: string }> = {
+            'UPI / QR':      { count: 0, amount: 0, color: '#3b82f6' },
+            'Cash':          { count: 0, amount: 0, color: '#10b981' },
+            'Card':          { count: 0, amount: 0, color: '#8b5cf6' },
+            'Other / Split': { count: 0, amount: 0, color: '#f59e0b' }
+          };
+          paidInvoices.forEach(i => {
+            const m = (i.mode || 'UPI').toUpperCase();
+            let key = 'Other / Split';
+            if (m.includes('UPI') || m.includes('QR')) key = 'UPI / QR';
+            else if (m.includes('CASH')) key = 'Cash';
+            else if (m.includes('CARD')) key = 'Card';
+            modeMap[key].count += 1;
+            modeMap[key].amount += Number(i.amount) || 0;
+          });
+
+          // Daily Sales Map for Chart
+          const daySalesMap: Record<string, { date: string; label: string; amount: number; count: number }> = {};
+          filteredInvoices.forEach(i => {
+            const dStr = (i.date || todayStr).slice(0, 10);
+            if (!daySalesMap[dStr]) {
+              let label = dStr;
+              try {
+                const parsed = new Date(dStr);
+                label = parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+              } catch {}
+              daySalesMap[dStr] = { date: dStr, label, amount: 0, count: 0 };
+            }
+            if (i.status === 'PAID') {
+              daySalesMap[dStr].amount += Number(i.amount) || 0;
+            }
+            daySalesMap[dStr].count += 1;
+          });
+          const daySalesList = Object.values(daySalesMap).sort((a, b) => a.date.localeCompare(b.date));
+          const maxDayAmount = Math.max(...daySalesList.map(d => d.amount), 1);
+
+          // Top Services & Products breakdown
+          const serviceSalesMap: Record<string, { name: string; qty: number; revenue: number }> = {};
+          filteredInvoices.forEach(i => {
+            if (i.items && i.items.length > 0) {
+              i.items.forEach(item => {
+                const sName = item.name || 'Service';
+                if (!serviceSalesMap[sName]) serviceSalesMap[sName] = { name: sName, qty: 0, revenue: 0 };
+                serviceSalesMap[sName].qty += item.qty || 1;
+                serviceSalesMap[sName].revenue += Number(item.amount) || ((Number(item.rate) || 0) * (item.qty || 1)) || 0;
+              });
+            } else if (i.service) {
+              const sName = i.service;
+              if (!serviceSalesMap[sName]) serviceSalesMap[sName] = { name: sName, qty: 0, revenue: 0 };
+              serviceSalesMap[sName].qty += 1;
+              serviceSalesMap[sName].revenue += Number(i.amount) || 0;
+            }
+          });
+          const topServices = Object.values(serviceSalesMap).sort((a, b) => b.revenue - a.revenue).slice(0, 6);
+
+          // Category distribution
+          const allMenNames = new Set(menSections.flatMap(s => s.items.map(x => x.name.toLowerCase())));
+          const allWomenNames = new Set(womenSections.flatMap(s => s.items.map(x => x.name.toLowerCase())));
+          const allProductNames = new Set(productItems.map(x => x.name.toLowerCase()));
+
+          let menRev = 0, womenRev = 0, productRev = 0, otherRev = 0;
+          filteredInvoices.forEach(i => {
+            if (i.items && i.items.length > 0) {
+              i.items.forEach(item => {
+                const lower = (item.name || '').toLowerCase();
+                const amt = Number(item.amount) || 0;
+                if (allMenNames.has(lower)) menRev += amt;
+                else if (allWomenNames.has(lower)) womenRev += amt;
+                else if (allProductNames.has(lower)) productRev += amt;
+                else otherRev += amt;
+              });
+            } else {
+              menRev += Number(i.amount) || 0;
+            }
+          });
+          const totalCategoryRev = (menRev + womenRev + productRev + otherRev) || 1;
+
+          // Customer Spending & Retention
+          const customerSpendMap: Record<string, { name: string; phone: string; visits: number; spent: number }> = {};
+          filteredInvoices.forEach(i => {
+            const key = (i.phone || i.customer || 'walkin').trim();
+            if (!customerSpendMap[key]) {
+              customerSpendMap[key] = { name: i.customer || 'Valued Client', phone: i.phone || '', visits: 0, spent: 0 };
+            }
+            customerSpendMap[key].visits += 1;
+            customerSpendMap[key].spent += Number(i.amount) || 0;
+          });
+          const topSpenders = Object.values(customerSpendMap).sort((a, b) => b.spent - a.spent).slice(0, 5);
+          const totalUniqueClients = Object.keys(customerSpendMap).length;
+          const repeatClients = Object.values(customerSpendMap).filter(c => c.visits > 1).length;
+          const retentionRate = totalUniqueClients > 0 ? Math.round((repeatClients / totalUniqueClients) * 100) : 0;
+
+          // Export CSV handler
+          const handleExportCsv = () => {
+            const headers = ['Invoice ID', 'Date & Time', 'Customer Name', 'Phone', 'Services', 'Gross Subtotal', 'Discount', 'Taxable Amount', 'GST Rate', 'GST Amount', 'Total Paid', 'Payment Mode', 'Status'];
+            const rows = filteredInvoices.map(inv => {
+              const fin = computeInvoiceFinancials(inv);
+              const servicesText = (inv.items && inv.items.length > 0) ? inv.items.map(it => `${it.name} (x${it.qty})`).join('; ') : (inv.service || '');
+              return [
+                inv.id,
+                `"${formatReceiptDateTime(inv.date)}"`,
+                `"${(inv.customer || '').replace(/"/g, '""')}"`,
+                `"${inv.phone || ''}"`,
+                `"${servicesText.replace(/"/g, '""')}"`,
+                fin.grossSubtotal.toFixed(2),
+                fin.discountAmt.toFixed(2),
+                fin.taxableAmt.toFixed(2),
+                `${fin.gstRate}%`,
+                fin.taxAmt.toFixed(2),
+                fin.totalPayable.toFixed(2),
+                inv.mode,
+                inv.status
+              ].join(',');
+            });
+            const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows].join('\n');
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement('a');
+            link.setAttribute('href', encodedUri);
+            link.setAttribute('download', `Duke_Duchess_Sales_Report_${todayStr}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          };
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+              {/* Header with Title and Export Button */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <BarChart3 size={24} color="var(--accent-gold)" /> Reports &amp; Financial Analytics
+                  </h2>
+                  <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
+                    Real-time revenue performance, service trends, tax reporting, and client retention insights
+                  </p>
+                </div>
+                <button
+                  onClick={handleExportCsv}
+                  style={{
+                    padding: '0.55rem 1.1rem',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--accent-gold)',
+                    backgroundColor: 'rgba(212,175,55,0.12)',
+                    color: 'var(--accent-gold)',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <FileSpreadsheet size={16} /> Export Excel / CSV
+                </button>
+              </div>
+
+              {/* Date Filter Bar */}
+              <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '0.9rem 1.25rem', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                    <Calendar size={13} /> Period:
+                  </span>
+                  {[
+                    { id: 'all',    label: 'All Time' },
+                    { id: 'today',  label: 'Today' },
+                    { id: '7days',  label: 'Last 7 Days' },
+                    { id: 'month',  label: 'This Month' },
+                    { id: 'custom', label: 'Custom Range' },
+                  ].map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => setReportRange(p.id as any)}
+                      style={{
+                        padding: '0.35rem 0.8rem',
+                        borderRadius: '7px',
+                        fontSize: '0.78rem',
+                        fontWeight: reportRange === p.id ? 700 : 500,
+                        cursor: 'pointer',
+                        border: reportRange === p.id ? '2px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                        backgroundColor: reportRange === p.id ? 'rgba(212,175,55,0.15)' : 'transparent',
+                        color: reportRange === p.id ? 'var(--accent-gold)' : 'var(--text-muted)',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Custom Date Pickers */}
+                {reportRange === 'custom' && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>From:</span>
+                      <input type="date" value={reportFrom} onChange={e => setReportFrom(e.target.value)} style={{ padding: '0.35rem 0.6rem', borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.8rem', outline: 'none' }} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>To:</span>
+                      <input type="date" value={reportTo} onChange={e => setReportTo(e.target.value)} style={{ padding: '0.35rem 0.6rem', borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.8rem', outline: 'none' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Row 1: Executive KPI Cards ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                {/* Total Revenue */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid rgba(16,185,129,0.3)', borderLeft: '4px solid #10b981', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Net Revenue</span>
+                    <TrendingUp size={16} color="#10b981" />
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981' }}>
+                    ₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    {paidInvoices.length} paid transactions
+                  </div>
+                </div>
+
+                {/* Total Bills */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid rgba(59,130,246,0.3)', borderLeft: '4px solid #3b82f6', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Invoices</span>
+                    <Receipt size={16} color="#3b82f6" />
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#3b82f6' }}>
+                    {totalBillsCount}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Client visits recorded
+                  </div>
+                </div>
+
+                {/* Average Bill Value (Ticket Size) */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid rgba(212,175,55,0.3)', borderLeft: '4px solid var(--accent-gold)', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Avg Ticket Size</span>
+                    <Award size={16} color="var(--accent-gold)" />
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-gold)' }}>
+                    ₹{avgBillValue.toLocaleString('en-IN')}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Average spend per bill
+                  </div>
+                </div>
+
+                {/* Total GST Collected */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid rgba(139,92,246,0.3)', borderLeft: '4px solid #8b5cf6', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>GST Collected</span>
+                    <Percent size={16} color="#8b5cf6" />
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#8b5cf6' }}>
+                    ₹{totalGstCollected.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    CGST: ₹{totalCgst.toFixed(2)} | SGST: ₹{totalSgst.toFixed(2)}
+                  </div>
+                </div>
+
+                {/* Total Discounts Given */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid rgba(245,158,11,0.3)', borderLeft: '4px solid #f59e0b', borderRadius: '12px', padding: '1rem 1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Discounts Given</span>
+                    <Tag size={16} color="#f59e0b" />
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b' }}>
+                    ₹{totalDiscountsGiven.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Promotional customer savings
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Row 2: Sales Trend Chart & Payment Mode Breakdown ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1.1fr', gap: '1.25rem' }}>
+
+                {/* Daily Revenue Trend Bar Chart */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.25rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                    <div>
+                      <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <TrendingUp size={16} color="var(--accent-gold)" /> Daily Sales Revenue Trend
+                      </h4>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>Revenue progression across selected date range</p>
+                    </div>
+                  </div>
+
+                  {daySalesList.length === 0 ? (
+                    <div style={{ height: '220px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      <Receipt size={36} style={{ opacity: 0.3, marginBottom: '0.5rem' }} />
+                      No sales data available for this period
+                    </div>
+                  ) : (
+                    <div style={{ height: '220px', display: 'flex', alignItems: 'flex-end', gap: '0.75rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-color)', position: 'relative' }}>
+                      {daySalesList.map((d, idx) => {
+                        const heightPct = Math.max(12, Math.round((d.amount / maxDayAmount) * 100));
+                        return (
+                          <div key={idx} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end', position: 'relative' }}>
+                            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-gold)', marginBottom: '4px', whiteSpace: 'nowrap' }}>
+                              ₹{d.amount > 999 ? `${Math.round(d.amount / 1000)}k` : d.amount}
+                            </div>
+                            <div
+                              title={`${d.date}: ₹${d.amount.toLocaleString('en-IN')} (${d.count} bills)`}
+                              style={{
+                                width: '100%',
+                                maxWidth: '38px',
+                                height: `${heightPct}%`,
+                                background: 'linear-gradient(180deg, #d4af37 0%, #b8973d 100%)',
+                                borderRadius: '6px 6px 0 0',
+                                transition: 'height 0.3s ease',
+                                cursor: 'pointer',
+                                boxShadow: '0 2px 8px rgba(212,175,55,0.2)'
+                              }}
+                            />
+                            <div style={{ position: 'absolute', bottom: '-1.4rem', fontSize: '0.68rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                              {d.label}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Payment Methods Split */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                      <CreditCard size={16} color="#3b82f6" /> Payment Mode Split
+                    </h4>
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>Cash drawer vs digital payment reconciliation</p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      {Object.entries(modeMap).map(([mode, data]) => {
+                        const pct = totalRevenue > 0 ? Math.round((data.amount / totalRevenue) * 100) : 0;
+                        return (
+                          <div key={mode}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+                              <span style={{ fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: data.color }} />
+                                {mode}
+                              </span>
+                              <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>
+                                ₹{data.amount.toLocaleString('en-IN')} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({pct}%)</span>
+                              </span>
+                            </div>
+                            <div style={{ width: '100%', height: '7px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ width: `${pct}%`, height: '100%', backgroundColor: data.color, borderRadius: '4px', transition: 'width 0.4s ease' }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem', marginTop: '1rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    <span>Total Paid Collections:</span>
+                    <strong style={{ color: '#10b981' }}>₹{totalRevenue.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Row 3: Service Leaderboard & Category Share ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1.2fr', gap: '1.25rem' }}>
+
+                {/* Top Performing Services */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                    <Sparkles size={16} color="var(--accent-gold)" /> Top Performing Services &amp; Products
+                  </h4>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>Ranked by total revenue generated</p>
+
+                  {topServices.length === 0 ? (
+                    <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                      No service records found in this range
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      {topServices.map((svc, idx) => {
+                        const rankMedals = ['🥇', '🥈', '🥉'];
+                        const rankBadge = rankMedals[idx] || `#${idx + 1}`;
+                        return (
+                          <div key={svc.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 0.8rem', borderRadius: '8px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                              <span style={{ fontSize: '0.9rem', width: '22px', textAlign: 'center' }}>{rankBadge}</span>
+                              <div>
+                                <div style={{ fontSize: '0.83rem', fontWeight: 700, color: 'var(--text-main)' }}>{svc.name}</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{svc.qty} billed / ordered</div>
+                              </div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--accent-gold)' }}>₹{svc.revenue.toLocaleString('en-IN')}</div>
+                              <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                                {totalRevenue > 0 ? Math.round((svc.revenue / totalRevenue) * 100) : 0}% of sales
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Category Share (Men vs Women vs Products) */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+                    <PieChart size={16} color="#8b5cf6" /> Category Revenue Split
+                  </h4>
+                  <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>Men vs Women services vs Retail products</p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {[
+                      { label: 'Men Salon Services',   amount: menRev,     color: '#3b82f6' },
+                      { label: 'Women Salon Services', amount: womenRev,   color: '#ec4899' },
+                      { label: 'Retail Products',      amount: productRev, color: '#f59e0b' },
+                      ...(otherRev > 0 ? [{ label: 'Other Packages', amount: otherRev, color: '#10b981' }] : [])
+                    ].map(cat => {
+                      const pct = Math.round((cat.amount / totalCategoryRev) * 100);
+                      return (
+                        <div key={cat.label}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+                            <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{cat.label}</span>
+                            <span style={{ fontWeight: 700, color: cat.color }}>
+                              ₹{cat.amount.toLocaleString('en-IN')} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({pct}%)</span>
+                            </span>
+                          </div>
+                          <div style={{ width: '100%', height: '8px', backgroundColor: 'var(--bg-primary)', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: `${pct}%`, height: '100%', backgroundColor: cat.color, borderRadius: '4px', transition: 'width 0.4s' }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '8px', padding: '0.75rem', marginTop: '1.5rem', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                    <span style={{ color: 'var(--text-muted)' }}>Top Category:</span>
+                    <strong style={{ color: 'var(--accent-gold)' }}>
+                      {menRev >= womenRev ? 'Men Salon Services' : 'Women Salon Services'}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Row 4: Client Retention & VIP Loyalty ── */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+
+                {/* Client Retention Ratio */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
+                    <Users size={16} color="var(--accent-gold)" /> Client Retention Rate
+                  </h4>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <span style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-gold)' }}>{retentionRate}%</span>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>repeat clients</span>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Unique Clients Billed:</span>
+                      <strong style={{ color: 'var(--text-main)' }}>{totalUniqueClients}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Returning Clients (2+ visits):</span>
+                      <strong style={{ color: '#10b981' }}>{repeatClients}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top VIP Spenders */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                    <Award size={16} color="#10b981" /> Top VIP Clients (Spend)
+                  </h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {topSpenders.slice(0, 3).map((c, i) => (
+                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem' }}>
+                        <div>
+                          <span style={{ fontWeight: 600, color: 'var(--text-main)' }}>{c.name}</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '6px' }}>({c.visits} visits)</span>
+                        </div>
+                        <strong style={{ color: 'var(--accent-gold)' }}>₹{c.spent.toLocaleString('en-IN')}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Collection Health */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '1.25rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                    <CheckCircle size={16} color="#3b82f6" /> Collection Health
+                  </h4>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.5rem' }}>
+                    <span style={{ fontSize: '2rem', fontWeight: 800, color: '#10b981' }}>
+                      {totalBillsCount > 0 ? Math.round((paidInvoices.length / totalBillsCount) * 100) : 100}%
+                    </span>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>paid on time</span>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Paid Bills:</span>
+                      <strong style={{ color: '#10b981' }}>{paidInvoices.length}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Unpaid / Outstanding:</span>
+                      <strong style={{ color: '#ef4444' }}>{totalBillsCount - paidInvoices.length}</strong>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+          );
+        })()}
+
         {/* Placeholder for remaining tabs */}
-        {['reports', 'settings'].includes(activeTab) && (
+        {activeTab === 'settings' && (
           <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '3rem', textAlign: 'center' }}>
             <Sparkles size={48} color="var(--accent-gold)" style={{ marginBottom: '1rem' }} />
             <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-main)', textTransform: 'capitalize', marginBottom: '0.5rem' }}>
-              {activeTab.replace('-', ' ')} Module Active
+              Settings &amp; Salon Configuration
             </h3>
             <p style={{ color: 'var(--text-muted)', maxWidth: '480px', margin: '0 auto 1.5rem auto', fontSize: '0.875rem' }}>
-              Live data connection to Duke & Duchess MongoDB Billing Backend for {activeTab}.
+              Salon phone: +91 88610 22242 &nbsp;|&nbsp; Nagarbhavi, Bengaluru &nbsp;|&nbsp; Connected to MongoDB
             </p>
             <button onClick={() => setActiveTab('dashboard')} style={{ backgroundColor: 'var(--bg-hover)', color: 'var(--accent-gold)', border: '1px solid var(--accent-gold)', padding: '0.5rem 1.25rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>
               ← Back to Dashboard
