@@ -37,6 +37,31 @@ type CartItem = { id: string; name: string; price: number; qty: number };
 // Catalogue section type
 type CatalogueSection = { section: string; items: { id: string; name: string; price: number }[] };
 
+// Invoice type
+type Invoice = {
+  id: string;
+  customer: string;
+  phone: string;
+  service: string;
+  date: string;
+  amount: number;
+  gst: number;
+  discount: number;
+  status: 'PAID' | 'UNPAID';
+  mode: string;
+};
+
+// Customer type
+type Customer = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  visits: number;
+  balance: number;
+  tag: string;
+};
+
 export default function DukeDuchessBillingApp() {
   const [activeTab, setActiveTab] = useState<
     | 'dashboard'
@@ -56,39 +81,21 @@ export default function DukeDuchessBillingApp() {
   const [invFilterTo,     setInvFilterTo]     = useState('');
   const [invFilterStatus, setInvFilterStatus] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL');
   const [invSearch,       setInvSearch]       = useState('');
-  const [receiptInvoice,  setReceiptInvoice]  = useState<null | typeof invoices[0]>(null);
+  const [receiptInvoice,  setReceiptInvoice]  = useState<null | Invoice>(null);
 
-  // Live Data for Billing Modules
-  const [stats, setStats] = useState({
-    revenue: '₹ 1,48,500',
-    pending: '₹ 12,400',
-    totalInvoices: 124,
-    customersCount: 86
-  });
+  // Live Invoices & Customers loaded dynamically from MongoDB
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
-  const [invoices, setInvoices] = useState([
-    { id: 'INV-00104', customer: 'Ananya Sharma',    phone: '+91 98765 43210', service: 'Hair Coloring & Spa',              date: '2026-11-03', amount: 4500,  gst: 18, discount: 0,   status: 'PAID',   mode: 'UPI'  },
-    { id: 'INV-00103', customer: 'Vikramaditya Roy', phone: '+91 98123 45678', service: 'Royal Grooming Package',           date: '2026-11-03', amount: 2800,  gst: 18, discount: 10,  status: 'PAID',   mode: 'CARD' },
-    { id: 'INV-00102', customer: 'Priya Sundaram',   phone: '+91 97654 32109', service: 'Keratin Hair Treatment',           date: '2026-11-02', amount: 6500,  gst: 18, discount: 0,   status: 'UNPAID', mode: 'PENDING' },
-    { id: 'INV-00101', customer: 'Rajesh Kumar',     phone: '+91 91234 56789', service: 'Haircut & Beard Styling',          date: '2026-11-02', amount: 1200,  gst: 0,  discount: 0,   status: 'PAID',   mode: 'CASH' },
-    { id: 'INV-00100', customer: 'Meena Pillai',     phone: '+91 99887 76655', service: 'Bridal Package',                   date: '2026-11-01', amount: 25100, gst: 18, discount: 5,   status: 'PAID',   mode: 'UPI'  },
-    { id: 'INV-00099', customer: 'Suresh Nair',      phone: '+91 90000 11223', service: 'Advance Haircut (Hair bomb)',       date: '2026-11-01', amount: 1499,  gst: 18, discount: 0,   status: 'PAID',   mode: 'CASH' },
-    { id: 'INV-00098', customer: 'Deepa Menon',      phone: '+91 81234 09876', service: 'Advance Hydra Facial',             date: '2026-10-31', amount: 5299,  gst: 18, discount: 0,   status: 'PAID',   mode: 'CARD' },
-    { id: 'INV-00097', customer: 'Arun Krishnan',    phone: '+91 87654 32100', service: 'Tanino Hair Treatment',            date: '2026-10-31', amount: 2999,  gst: 18, discount: 0,   status: 'PAID',   mode: 'UPI'  },
-    { id: 'INV-00096', customer: 'Fathima Banu',     phone: '+91 95678 12340', service: 'Nail Art (Both Hands)',             date: '2026-10-30', amount: 1499,  gst: 18, discount: 0,   status: 'UNPAID', mode: 'PENDING' },
-    { id: 'INV-00095', customer: 'George Thomas',    phone: '+91 94321 56780', service: 'Thai Massage',                     date: '2026-10-30', amount: 1888,  gst: 18, discount: 0,   status: 'PAID',   mode: 'CASH' },
-    { id: 'INV-00094', customer: 'Lakshmi Devi',     phone: '+91 98001 23456', service: 'Gel Nails + Advance Spa',          date: '2026-10-29', amount: 4499,  gst: 18, discount: 10,  status: 'PAID',   mode: 'UPI'  },
-    { id: 'INV-00093', customer: 'Ravi Shankar',     phone: '+91 91111 22333', service: 'Advance Facial Therapy L1',        date: '2026-10-29', amount: 6999,  gst: 18, discount: 0,   status: 'PAID',   mode: 'CARD' },
-    { id: 'INV-00092', customer: 'Nisha Babu',       phone: '+91 90909 08070', service: 'Rebonding + Colour',               date: '2026-10-28', amount: 11999, gst: 18, discount: 15,  status: 'PAID',   mode: 'UPI'  },
-    { id: 'INV-00091', customer: 'Ajith Kumar',      phone: '+91 88877 66554', service: 'Signature Haircut + Beard Combo',  date: '2026-10-28', amount: 999,   gst: 0,  discount: 0,   status: 'PAID',   mode: 'CASH' },
-    { id: 'INV-00090', customer: 'Saritha Nambiar',  phone: '+91 97700 55443', service: 'Master Pro Glow Facial',           date: '2026-10-27', amount: 5999,  gst: 18, discount: 0,   status: 'UNPAID', mode: 'PENDING' },
-  ]);
-
-  const [customers, setCustomers] = useState([
-    { id: 'CUST-001', name: 'Ananya Sharma', phone: '+91 98765 43210', email: 'ananya@example.com', visits: 14, balance: 0, tag: 'VIP Member' },
-    { id: 'CUST-002', name: 'Vikramaditya Roy', phone: '+91 98123 45678', email: 'vikram@example.com', visits: 8, balance: 0, tag: 'Regular' },
-    { id: 'CUST-003', name: 'Priya Sundaram', phone: '+91 97654 32109', email: 'priya@example.com', visits: 5, balance: 6500, tag: 'Premium' },
-  ]);
+  // Computed Live Metrics
+  const totalRevenue = invoices
+    .filter(i => i.status === 'PAID')
+    .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+  const totalPending = invoices
+    .filter(i => i.status === 'UNPAID')
+    .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
+  const paidCount = invoices.filter(i => i.status === 'PAID').length;
+  const unpaidCount = invoices.filter(i => i.status === 'UNPAID').length;
 
   // ── Add Customer Modal state ───────────────────────────────────────────────
   const [showAddCustomer, setShowAddCustomer] = useState(false);
@@ -590,8 +597,9 @@ export default function DukeDuchessBillingApp() {
 
   const handleCreateInvoice = (e: React.FormEvent) => {
     e.preventDefault();
-    const newInv = {
-      id: `INV-00${invoices.length + 105}`,
+    const nextNum = invoices.length + 1;
+    const newInv: Invoice = {
+      id: `INV-${String(nextNum).padStart(4, '0')}`,
       customer: invCustomer || 'Walk-in Client',
       phone: '',
       service: invService,
@@ -671,8 +679,9 @@ export default function DukeDuchessBillingApp() {
       }));
     }
 
-    const newInv = {
-      id: `INV-00${invoices.length + 105}`,
+    const nextNum = invoices.length + 1;
+    const newInv: Invoice = {
+      id: `INV-${String(nextNum).padStart(4, '0')}`,
       customer: customerName,
       phone: posPhone,
       service: serviceNames,
@@ -708,8 +717,8 @@ export default function DukeDuchessBillingApp() {
         const custData = await custRes.json();
         const invData  = await invRes.json();
         const catData  = await catRes.json();
-        if (Array.isArray(custData) && custData.length > 0) setCustomers(custData);
-        if (Array.isArray(invData) && invData.length > 0) setInvoices(invData);
+        if (Array.isArray(custData)) setCustomers(custData);
+        if (Array.isArray(invData)) setInvoices(invData);
         if (catData.menSections) setMenSections(catData.menSections);
         if (catData.womenSections) setWomenSections(catData.womenSections);
         if (catData.productItems) setProductItems(catData.productItems);
@@ -826,10 +835,34 @@ export default function DukeDuchessBillingApp() {
             {/* KPI Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '2rem' }}>
               {[
-                { title: 'Total Sales Revenue', value: stats.revenue, change: '+18.4% vs last month', icon: TrendingUp, color: '#10b981' },
-                { title: 'Pending Receivables', value: stats.pending, change: '3 unpaid bills', icon: Clock, color: '#f59e0b' },
-                { title: 'Invoices Generated', value: stats.totalInvoices, change: '+12 today', icon: Receipt, color: '#3b82f6' },
-                { title: 'Active Salon Clients', value: stats.customersCount, change: '14 VIP members', icon: Users, color: '#d4af37' },
+                {
+                  title: 'Total Sales Revenue',
+                  value: `₹ ${totalRevenue.toLocaleString('en-IN')}`,
+                  change: `${paidCount} paid invoice${paidCount === 1 ? '' : 's'}`,
+                  icon: TrendingUp,
+                  color: '#10b981'
+                },
+                {
+                  title: 'Pending Receivables',
+                  value: `₹ ${totalPending.toLocaleString('en-IN')}`,
+                  change: `${unpaidCount} unpaid bill${unpaidCount === 1 ? '' : 's'}`,
+                  icon: Clock,
+                  color: '#f59e0b'
+                },
+                {
+                  title: 'Invoices Generated',
+                  value: invoices.length,
+                  change: invoices.length > 0 ? `${invoices.length} total generated` : 'No bills yet',
+                  icon: Receipt,
+                  color: '#3b82f6'
+                },
+                {
+                  title: 'Active Salon Clients',
+                  value: customers.length,
+                  change: `${customers.filter(c => c.tag === 'VIP Member').length} VIP members`,
+                  icon: Users,
+                  color: '#d4af37'
+                },
               ].map((kpi, idx) => {
                 const Icon = kpi.icon;
                 return (
@@ -869,28 +902,38 @@ export default function DukeDuchessBillingApp() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoices.map((inv) => (
-                    <tr key={inv.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                      <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--accent-gold)' }}>{inv.id}</td>
-                      <td style={{ padding: '1rem', color: 'var(--text-main)' }}>{inv.customer}</td>
-                      <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{inv.service}</td>
-                      <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{inv.date}</td>
-                      <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>₹ {inv.amount.toLocaleString('en-IN')}</td>
-                      <td style={{ padding: '1rem' }}><span style={{ backgroundColor: 'var(--bg-hover)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>{inv.mode}</span></td>
-                      <td style={{ padding: '1rem' }}>
-                        <span style={{
-                          padding: '0.25rem 0.65rem',
-                          borderRadius: '12px',
-                          fontSize: '0.75rem',
-                          fontWeight: 600,
-                          backgroundColor: inv.status === 'PAID' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                          color: inv.status === 'PAID' ? '#10b981' : '#f59e0b'
-                        }}>
-                          {inv.status}
-                        </span>
+                  {invoices.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <Receipt size={36} style={{ margin: '0 auto 0.5rem', opacity: 0.3, display: 'block' }} />
+                        <div style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.95rem' }}>No invoices generated yet</div>
+                        <div style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>Create your first bill in POS Billing to see live sales here.</div>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    invoices.slice(0, 10).map((inv) => (
+                      <tr key={inv.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                        <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--accent-gold)' }}>{inv.id}</td>
+                        <td style={{ padding: '1rem', color: 'var(--text-main)' }}>{inv.customer}</td>
+                        <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{inv.service}</td>
+                        <td style={{ padding: '1rem', color: 'var(--text-muted)' }}>{inv.date}</td>
+                        <td style={{ padding: '1rem', fontWeight: 600, color: 'var(--text-main)' }}>₹ {inv.amount.toLocaleString('en-IN')}</td>
+                        <td style={{ padding: '1rem' }}><span style={{ backgroundColor: 'var(--bg-hover)', padding: '0.25rem 0.5rem', borderRadius: '4px', fontSize: '0.75rem' }}>{inv.mode}</span></td>
+                        <td style={{ padding: '1rem' }}>
+                          <span style={{
+                            padding: '0.25rem 0.65rem',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                            backgroundColor: inv.status === 'PAID' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                            color: inv.status === 'PAID' ? '#10b981' : '#f59e0b'
+                          }}>
+                            {inv.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
