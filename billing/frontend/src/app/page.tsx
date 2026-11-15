@@ -32,6 +32,7 @@ import {
   Phone,
   MessageCircle
 } from 'lucide-react';
+import { SALON_LOGO_DATA_URI } from './logoDataUri';
 
 // POS cart item type
 type CartItem = { id: string; name: string; price: number; qty: number };
@@ -154,18 +155,8 @@ function generateReceiptHtmlString(inv: Invoice) {
 <body>
   <div class="receipt-card">
     <!-- Top Emblem Badge -->
-    <div style="width: 82px; height: 96px; background: #0b0b0b; border-radius: 6px 6px 14px 14px; margin: 0 auto 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1.5px solid #d4af37; padding: 4px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
-      <svg width="32" height="24" viewBox="0 0 40 30" fill="none">
-        <path d="M20 2L24.5 10.5L34 5L30 22H10L6 5L15.5 10.5L20 2Z" fill="#d4af37" stroke="#f5d77f" stroke-width="1"/>
-        <circle cx="20" cy="2" r="2" fill="#fff"/>
-        <circle cx="6" cy="5" r="1.5" fill="#fff"/>
-        <circle cx="34" cy="5" r="1.5" fill="#fff"/>
-        <rect x="8" y="24" width="24" height="3" rx="1.5" fill="#d4af37"/>
-      </svg>
-      <div style="font-size: 7px; font-weight: 800; color: #d4af37; letter-spacing: 0.5px; font-family: 'Cinzel', 'Times New Roman', serif; text-align: center; line-height: 1.1; margin-top: 2px;">NEW DUKE &amp;</div>
-      <div style="font-size: 7.5px; font-weight: 800; color: #d4af37; letter-spacing: 0.8px; font-family: 'Cinzel', 'Times New Roman', serif; text-align: center; line-height: 1.1;">DUCHESS</div>
-      <div style="font-size: 5px; font-weight: 600; color: #f3cf55; letter-spacing: 0.5px; margin-top: 1px; text-align: center;">UNISEX SALON</div>
-      <div style="font-size: 8px; color: #d4af37; line-height: 1; margin-top: 1px;">❦</div>
+    <div style="text-align: center; margin: 0 auto 12px;">
+      <img src="${SALON_LOGO_DATA_URI}" alt="New Duke &amp; Duchess" style="width: 82px; height: 88px; object-fit: contain; border-radius: 8px; border: 1.5px solid #d4af37; box-shadow: 0 4px 10px rgba(0,0,0,0.15); background: #000; display: inline-block;" />
     </div>
 
     <!-- Main Salon Title -->
@@ -2265,18 +2256,8 @@ export default function DukeDuchessBillingApp() {
             <div id="printable-receipt" style={{ backgroundColor: '#ffffff', borderRadius: '6px', width: '100%', maxWidth: '700px', maxHeight: '86vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(0,0,0,0.6)', padding: '28px 36px 0 36px', color: '#111', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }} onClick={e => e.stopPropagation()}>
               
               {/* Top Shield Emblem Badge */}
-              <div style={{ width: '82px', height: '96px', background: '#0b0b0b', borderRadius: '6px 6px 14px 14px', margin: '0 auto 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #d4af37', padding: '4px', boxShadow: '0 4px 10px rgba(0,0,0,0.15)' }}>
-                <svg width="32" height="24" viewBox="0 0 40 30" fill="none">
-                  <path d="M20 2L24.5 10.5L34 5L30 22H10L6 5L15.5 10.5L20 2Z" fill="#d4af37" stroke="#f5d77f" strokeWidth="1"/>
-                  <circle cx="20" cy="2" r="2" fill="#fff"/>
-                  <circle cx="6" cy="5" r="1.5" fill="#fff"/>
-                  <circle cx="34" cy="5" r="1.5" fill="#fff"/>
-                  <rect x="8" y="24" width="24" height="3" rx="1.5" fill="#d4af37"/>
-                </svg>
-                <div style={{ fontSize: '7px', fontWeight: 800, color: '#d4af37', letterSpacing: '0.5px', fontFamily: '"Cinzel", "Times New Roman", serif', textAlign: 'center', lineHeight: 1.1, marginTop: '2px' }}>NEW DUKE &amp;</div>
-                <div style={{ fontSize: '7.5px', fontWeight: 800, color: '#d4af37', letterSpacing: '0.8px', fontFamily: '"Cinzel", "Times New Roman", serif', textAlign: 'center', lineHeight: 1.1 }}>DUCHESS</div>
-                <div style={{ fontSize: '5px', fontWeight: 600, color: '#f3cf55', letterSpacing: '0.5px', marginTop: '1px', textAlign: 'center' }}>UNISEX SALON</div>
-                <div style={{ fontSize: '8px', color: '#d4af37', lineHeight: 1, marginTop: '1px' }}>❦</div>
+              <div style={{ textAlign: 'center', margin: '0 auto 12px' }}>
+                <img src="/logo.png" alt="New Duke &amp; Duchess" style={{ width: '82px', height: '88px', objectFit: 'contain', borderRadius: '8px', border: '1.5px solid #d4af37', boxShadow: '0 4px 10px rgba(0,0,0,0.15)', background: '#000', display: 'inline-block' }} />
               </div>
 
               {/* Main Salon Title */}
