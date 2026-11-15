@@ -8,7 +8,6 @@ import {
   Receipt,
   CreditCard,
   BarChart3,
-  Settings,
   Plus,
   Minus,
   Search,
@@ -519,7 +518,6 @@ export default function DukeDuchessBillingApp() {
     | 'invoices'
     | 'payments'
     | 'reports'
-    | 'settings'
   >('dashboard');
 
   // Search & Filter State
@@ -1256,7 +1254,6 @@ export default function DukeDuchessBillingApp() {
             { id: 'invoices', label: 'Invoices & Billing', icon: Receipt },
             { id: 'payments', label: 'Payments & Receipts', icon: CreditCard },
             { id: 'reports', label: 'Reports & Analytics', icon: BarChart3 },
-            { id: 'settings', label: 'Settings & Users', icon: Settings },
           ].map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -2844,22 +2841,6 @@ export default function DukeDuchessBillingApp() {
             </div>
           );
         })()}
-
-        {/* Placeholder for remaining tabs */}
-        {activeTab === 'settings' && (
-          <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '12px', padding: '3rem', textAlign: 'center' }}>
-            <Sparkles size={48} color="var(--accent-gold)" style={{ marginBottom: '1rem' }} />
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-main)', textTransform: 'capitalize', marginBottom: '0.5rem' }}>
-              Settings &amp; Salon Configuration
-            </h3>
-            <p style={{ color: 'var(--text-muted)', maxWidth: '480px', margin: '0 auto 1.5rem auto', fontSize: '0.875rem' }}>
-              Salon phone: +91 88610 22242 &nbsp;|&nbsp; Nagarbhavi, Bengaluru &nbsp;|&nbsp; Connected to MongoDB
-            </p>
-            <button onClick={() => setActiveTab('dashboard')} style={{ backgroundColor: 'var(--bg-hover)', color: 'var(--accent-gold)', border: '1px solid var(--accent-gold)', padding: '0.5rem 1.25rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>
-              ← Back to Dashboard
-            </button>
-          </div>
-        )}
       </main>
 
       {/* ── RECEIPT MODAL (Matches Sample Design & < 50KB Guarantee) ── */}
