@@ -150,6 +150,9 @@ export default function EmployeeDashboard() {
 
   // Attendance workflow states
   const [step, setStep] = useState<'IDLE' | 'CAMERA' | 'GPS' | 'SUCCESS' | 'ERROR'>('IDLE');
+  const [lastAction, setLastAction] = useState<'CHECK_IN' | 'CHECK_OUT'>('CHECK_IN');
+  const [checkoutCheckInTime, setCheckoutCheckInTime] = useState<string>('');
+  const audioCtxRef = useRef<any>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [errorDistance, setErrorDistance] = useState<number | null>(null);
 
@@ -458,8 +461,88 @@ export default function EmployeeDashboard() {
     }
   };
 
+  // Sound synthesizer for check-in chime and check-out beep
+  const playBeep = (action: 'CHECK_IN' | 'CHECK_OUT') => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = audioCtxRef.current || new AudioCtx();
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      audioCtxRef.current = ctx;
+
+      const now = ctx.currentTime;
+      if (action === 'CHECK_OUT') {
+        // Distinct, punchy double-beep for Check-Out (880Hz -> 1046Hz)
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.connect(gain1);
+        gain1.connect(ctx.destination);
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(880, now);
+        gain1.gain.setValueAtTime(0.3, now);
+        gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc1.start(now);
+        osc1.stop(now + 0.12);
+
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.connect(gain2);
+        gain2.connect(ctx.destination);
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1046.5, now + 0.16);
+        gain2.gain.setValueAtTime(0.35, now + 0.16);
+        gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc2.start(now + 0.16);
+        osc2.stop(now + 0.35);
+
+        // Mobile haptic vibration feedback
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate([100, 50, 150]);
+        }
+      } else {
+        // Upward 3-tone chime for Check-In
+        const playTone = (freq: number, start: number, dur: number) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + start);
+          gain.gain.setValueAtTime(0.22, now + start);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);
+          osc.start(now + start);
+          osc.stop(now + start + dur);
+        };
+        playTone(523.25, 0, 0.14);
+        playTone(659.25, 0.12, 0.14);
+        playTone(783.99, 0.24, 0.3);
+
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(100);
+        }
+      }
+    } catch (_) {}
+  };
+
   // Camera & GPS workflows
   const startAttendance = async () => {
+    const actionType = (attendance?.checkInTime && !attendance?.checkOutTime) ? 'CHECK_OUT' : 'CHECK_IN';
+    setLastAction(actionType);
+    if (attendance?.checkInTime) {
+      setCheckoutCheckInTime(attendance.checkInTime);
+    }
+
+    // Pre-warm audio on user touch so mobile browsers allow playback
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (AudioCtx) {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioCtx();
+        if (audioCtxRef.current.state === 'suspended') audioCtxRef.current.resume();
+      }
+    } catch (_) {}
+
     await fetchProfile();
     setStep('CAMERA');
   };
@@ -597,7 +680,11 @@ export default function EmployeeDashboard() {
       async (position) => {
         const { latitude, longitude, accuracy } = position.coords;
         try {
-          const type = attendance?.checkInTime ? 'CHECK_OUT' : 'CHECK_IN';
+          const type = (attendance?.checkInTime && !attendance?.checkOutTime) ? 'CHECK_OUT' : 'CHECK_IN';
+          setLastAction(type);
+          if (attendance?.checkInTime) {
+            setCheckoutCheckInTime(attendance.checkInTime);
+          }
           const res = await fetch('/api/attendance', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -606,6 +693,7 @@ export default function EmployeeDashboard() {
           
           const data = await res.json();
           if (res.ok) {
+            playBeep(type);
             setStep('SUCCESS');
             fetchAttendance();
             fetchHistory();
@@ -1009,28 +1097,6 @@ export default function EmployeeDashboard() {
             )}
 
             {/* Step: SUCCESS */}
-            {step === 'SUCCESS' && (() => {
-              // Play a pleasant success chime using Web Audio API
-              try {
-                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                const playTone = (freq: number, startTime: number, duration: number) => {
-                  const osc = audioCtx.createOscillator();
-                  const gain = audioCtx.createGain();
-                  osc.connect(gain);
-                  gain.connect(audioCtx.destination);
-                  osc.type = 'sine';
-                  osc.frequency.setValueAtTime(freq, audioCtx.currentTime + startTime);
-                  gain.gain.setValueAtTime(0.18, audioCtx.currentTime + startTime);
-                  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + startTime + duration);
-                  osc.start(audioCtx.currentTime + startTime);
-                  osc.stop(audioCtx.currentTime + startTime + duration);
-                };
-                playTone(523.25, 0, 0.15);    // C5
-                playTone(659.25, 0.12, 0.15);  // E5
-                playTone(783.99, 0.24, 0.3);   // G5
-              } catch (_) { /* audio not available */ }
-              return null;
-            })()}
             {step === 'SUCCESS' && (
               <div className="card flex flex-col items-center justify-center text-center" style={{ overflow: 'hidden' }}>
                 {/* Inject animation keyframes */}
@@ -1052,7 +1118,7 @@ export default function EmployeeDashboard() {
                 `}</style>
 
                 {/* Animated tick with pulse ring */}
-                <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
+                <div style={{ position: 'relative', marginBottom: '1.25rem' }}>
                   <div style={{
                     position: 'absolute',
                     top: '50%',
@@ -1062,56 +1128,75 @@ export default function EmployeeDashboard() {
                     marginLeft: '-40px',
                     marginTop: '-40px',
                     borderRadius: '50%',
-                    border: '3px solid var(--accent-gold)',
+                    border: `3px solid ${lastAction === 'CHECK_OUT' ? '#ef4444' : 'var(--accent-gold)'}`,
                     animation: 'successPulseRing 1.5s ease-out forwards'
                   }} />
                   <div style={{
                     width: '80px',
                     height: '80px',
                     borderRadius: '50%',
-                    background: 'linear-gradient(135deg, var(--accent-gold), #d4a020)',
+                    background: lastAction === 'CHECK_OUT' 
+                      ? 'linear-gradient(135deg, #ef4444, #b91c1c)' 
+                      : 'linear-gradient(135deg, var(--accent-gold), #d4a020)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     animation: 'successBounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards',
-                    boxShadow: '0 8px 32px rgba(197, 160, 89, 0.35)'
+                    boxShadow: lastAction === 'CHECK_OUT' 
+                      ? '0 8px 32px rgba(239, 68, 68, 0.35)' 
+                      : '0 8px 32px rgba(197, 160, 89, 0.35)'
                   }}>
                     <CheckCircle size={44} color="#fff" strokeWidth={2.5} />
                   </div>
                 </div>
 
-                {/* Employee name greeting */}
+                {/* Status Badge */}
+                <div style={{ marginBottom: '0.6rem', animation: 'successFadeUp 0.5s ease-out 0.2s both' }}>
+                  <span className="badge" style={{
+                    backgroundColor: lastAction === 'CHECK_OUT' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                    color: lastAction === 'CHECK_OUT' ? '#ef4444' : 'var(--status-present)',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    padding: '0.4rem 1rem',
+                    borderRadius: '20px'
+                  }}>
+                    {lastAction === 'CHECK_OUT' ? '🔴 CHECK-OUT CONFIRMED' : '🟢 CHECK-IN CONFIRMED'}
+                  </span>
+                </div>
+
+                {/* Greeting */}
                 <h2 style={{
                   fontSize: '1.5rem',
                   fontWeight: 800,
                   color: 'var(--text-main)',
                   animation: 'successFadeUp 0.5s ease-out 0.3s both'
                 }}>
-                  {isCheckedIn ? 'See You Tomorrow!' : 'Welcome,'} {employeeName.split(' ')[0]}!
+                  {lastAction === 'CHECK_OUT' ? `See You Tomorrow, ${employeeName.split(' ')[0]}! 👋` : `Welcome, ${employeeName.split(' ')[0]}! ✨`}
                 </h2>
 
                 <p style={{
                   fontSize: '1.05rem',
-                  color: 'var(--accent-gold)',
+                  color: lastAction === 'CHECK_OUT' ? '#ef4444' : 'var(--accent-gold)',
                   fontWeight: 600,
-                  marginTop: '0.5rem',
+                  marginTop: '0.4rem',
                   animation: 'successFadeUp 0.5s ease-out 0.45s both'
                 }}>
-                  {isCheckedIn
-                    ? `Your check-out for today has been recorded ✓`
+                  {lastAction === 'CHECK_OUT'
+                    ? `Your shift check-out for today has been recorded ✓`
                     : `Your attendance for today is marked ✓`}
                 </p>
 
                 <p className="text-muted" style={{
-                  fontSize: '0.9rem',
-                  marginTop: '0.25rem',
+                  fontSize: '0.88rem',
+                  marginTop: '0.2rem',
                   animation: 'successFadeUp 0.5s ease-out 0.55s both'
                 }}>
                   {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                 </p>
                 
+                {/* Summary Card */}
                 <div style={{
-                  marginTop: '1.5rem',
+                  marginTop: '1.25rem',
                   width: '100%',
                   maxWidth: '400px',
                   textAlign: 'left',
@@ -1123,24 +1208,34 @@ export default function EmployeeDashboard() {
                 }}>
                   <p className="flex justify-between" style={{ marginBottom: '0.6rem' }}>
                     <span className="text-muted">Employee</span>
-                    <strong>{employeeName}</strong>
+                    <strong>{employeeName} ({employeeId})</strong>
                   </p>
                   <p className="flex justify-between" style={{ marginBottom: '0.6rem' }}>
-                    <span className="text-muted">Time</span>
-                    <strong>{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                    <span className="text-muted">{lastAction === 'CHECK_OUT' ? 'Logout Time' : 'Login Time'}</span>
+                    <strong style={{ color: lastAction === 'CHECK_OUT' ? '#ef4444' : 'var(--status-present)' }}>
+                      {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </strong>
                   </p>
+                  {lastAction === 'CHECK_OUT' && checkoutCheckInTime && (
+                    <p className="flex justify-between" style={{ marginBottom: '0.6rem' }}>
+                      <span className="text-muted">Total Hours Today</span>
+                      <strong className="text-gold">
+                        {calculateWorkingHours(checkoutCheckInTime, new Date().toISOString())}
+                      </strong>
+                    </p>
+                  )}
                   <p className="flex justify-between" style={{ marginBottom: '0.6rem' }}>
-                    <span className="text-muted">Location</span>
-                    <strong>New Duke & Duchess</strong>
+                    <span className="text-muted">Branch</span>
+                    <strong>{profileData?.user?.branch === 'RR_NAGAR' ? 'RR Nagar' : 'Nagarbhavi'}</strong>
                   </p>
                   <p className="flex justify-between">
-                    <span className="text-muted">GPS Verified</span>
-                    <strong style={{ color: 'var(--status-present)' }}>✓ Within 50m</strong>
+                    <span className="text-muted">GPS Geofence</span>
+                    <strong style={{ color: 'var(--status-present)' }}>✓ Verified within 50m</strong>
                   </p>
                 </div>
 
                 <button className="btn-primary" style={{
-                  marginTop: '2rem',
+                  marginTop: '1.75rem',
                   maxWidth: '320px',
                   animation: 'successFadeUp 0.5s ease-out 0.8s both'
                 }} onClick={() => setStep('IDLE')}>
