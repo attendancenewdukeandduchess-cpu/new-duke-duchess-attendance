@@ -7,6 +7,7 @@ export interface IUser extends Document {
   email?: string;
   password: string;
   role: 'EMPLOYEE' | 'ADMIN';
+  branch?: 'NAGARBHAVI' | 'RR_NAGAR';
   designation?: string;
   department?: string;
   joiningDate: Date;
@@ -23,6 +24,7 @@ const UserSchema = new Schema<IUser>({
   email:      { type: String, unique: true, sparse: true },
   password:   { type: String, required: true },
   role:       { type: String, enum: ['EMPLOYEE', 'ADMIN'], default: 'EMPLOYEE' },
+  branch:     { type: String, enum: ['NAGARBHAVI', 'RR_NAGAR'], default: 'NAGARBHAVI' },
   designation:{ type: String },
   department: { type: String },
   joiningDate:{ type: Date, default: Date.now },

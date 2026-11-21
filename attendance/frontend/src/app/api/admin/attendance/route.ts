@@ -18,9 +18,14 @@ export async function GET(req: Request) {
   const dateFrom  = searchParams.get('dateFrom') || '';
   const dateTo    = searchParams.get('dateTo')   || '';
   const empId     = searchParams.get('employeeId') || '';     // filter by specific employee
+  const branch    = searchParams.get('branch') || '';         // NAGARBHAVI | RR_NAGAR | all
 
   const now     = new Date();
   const query: any = {};
+
+  if (branch && branch !== 'all') {
+    query.branch = branch;
+  }
 
   // ── Date range ──────────────────────────────────────────────────────────────
   if (filter === 'today') {
@@ -61,11 +66,13 @@ export async function GET(req: Request) {
     const emp = employeeMap.get(rec.userId?.toString() || '');
     return {
       ...rec,
+      branch: rec.branch || emp?.branch || 'NAGARBHAVI',
       employee: emp ? {
         name: emp.name,
         employeeId: emp.employeeId,
         designation: emp.designation,
         department: emp.department,
+        branch: emp.branch || 'NAGARBHAVI',
       } : null,
     };
   });

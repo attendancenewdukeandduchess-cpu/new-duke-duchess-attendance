@@ -70,6 +70,7 @@ export default function EmployeeDashboard() {
   const [adminAttDateFrom, setAdminAttDateFrom] = useState('');
   const [adminAttDateTo, setAdminAttDateTo] = useState('');
   const [adminAttEmpFilter, setAdminAttEmpFilter] = useState('');
+  const [adminAttBranchFilter, setAdminAttBranchFilter] = useState<'all' | 'NAGARBHAVI' | 'RR_NAGAR'>('all');
   const [adminAttEmployees, setAdminAttEmployees] = useState<any[]>([]);
   const [adminAttViewMode, setAdminAttViewMode] = useState<'list' | 'byDate'>('list');
 
@@ -92,6 +93,7 @@ export default function EmployeeDashboard() {
   const [newEmpEmail, setNewEmpEmail] = useState('');
   const [newEmpDesig, setNewEmpDesig] = useState('Senior Stylist');
   const [newEmpDept, setNewEmpDept] = useState('Styling');
+  const [newEmpBranch, setNewEmpBranch] = useState<'NAGARBHAVI' | 'RR_NAGAR'>('NAGARBHAVI');
   const [newEmpSalary, setNewEmpSalary] = useState('25000');
   const [newEmpPassword, setNewEmpPassword] = useState('emp123');
   const [newEmpFaceDescriptor, setNewEmpFaceDescriptor] = useState<number[] | null>(null);
@@ -112,6 +114,7 @@ export default function EmployeeDashboard() {
   const [editEmpEmail, setEditEmpEmail] = useState('');
   const [editEmpDesig, setEditEmpDesig] = useState('');
   const [editEmpDept, setEditEmpDept] = useState('');
+  const [editEmpBranch, setEditEmpBranch] = useState<'NAGARBHAVI' | 'RR_NAGAR'>('NAGARBHAVI');
   const [editEmpSalary, setEditEmpSalary] = useState('');
   const [editEmpStatus, setEditEmpStatus] = useState('ACTIVE');
   const [editEmpPassword, setEditEmpPassword] = useState('');
@@ -205,7 +208,8 @@ export default function EmployeeDashboard() {
     filter: 'today' | 'week' | 'month' | 'custom' | 'all' = adminAttFilter,
     dateFrom: string = adminAttDateFrom,
     dateTo: string = adminAttDateTo,
-    empId: string = adminAttEmpFilter
+    empId: string = adminAttEmpFilter,
+    branch: string = adminAttBranchFilter
   ) => {
     setAdminAttLoading(true);
     try {
@@ -214,6 +218,7 @@ export default function EmployeeDashboard() {
         url += `&dateFrom=${dateFrom}&dateTo=${dateTo}`;
       }
       if (empId) url += `&employeeId=${empId}`;
+      if (branch && branch !== 'all') url += `&branch=${branch}`;
       const res = await fetch(url);
       const data = await res.json();
       setAdminAttRecords(data.records || []);
@@ -330,6 +335,7 @@ export default function EmployeeDashboard() {
     setEditEmpDesig(emp.designation || '');
     setEditEmpDept(emp.department || '');
     setEditEmpSalary(emp.baseSalary?.toString() || '0');
+    setEditEmpBranch((emp.branch === 'RR_NAGAR' || emp.branch === 'NAGARBHAVI') ? emp.branch : 'NAGARBHAVI');
     setEditEmpStatus(emp.status || 'ACTIVE');
     setEditEmpPassword('');
     setEditEmpJoiningDate(
@@ -356,6 +362,7 @@ export default function EmployeeDashboard() {
           designation: editEmpDesig,
           department: editEmpDept,
           baseSalary: Number(editEmpSalary),
+          branch: editEmpBranch,
           status: editEmpStatus,
           joiningDate: editEmpJoiningDate,
           ...(editEmpFaceDescriptor ? { faceDescriptor: editEmpFaceDescriptor } : {}),
@@ -397,6 +404,7 @@ export default function EmployeeDashboard() {
           designation: newEmpDesig,
           department: newEmpDept,
           baseSalary: Number(newEmpSalary),
+          branch: newEmpBranch,
           password: newEmpPassword,
           ...(newEmpFaceDescriptor ? { faceDescriptor: newEmpFaceDescriptor } : {})
         })
@@ -408,6 +416,7 @@ export default function EmployeeDashboard() {
         setNewEmpName('');
         setNewEmpMobile('');
         setNewEmpEmail('');
+        setNewEmpBranch('NAGARBHAVI');
         setTimeout(() => {
           setAddEmpModalOpen(false);
           setAddEmpMsg(null);
@@ -678,7 +687,9 @@ export default function EmployeeDashboard() {
       emp.name?.toLowerCase().includes(q) ||
       emp.employeeId?.toLowerCase().includes(q) ||
       emp.designation?.toLowerCase().includes(q) ||
-      emp.mobile?.includes(q)
+      emp.mobile?.includes(q) ||
+      (emp.branch === 'RR_NAGAR' && (q.includes('rr') || q.includes('rajarajeshwari'))) ||
+      (emp.branch === 'NAGARBHAVI' && (q.includes('nagar') || q.includes('bhavi')))
     );
   });
 
@@ -948,7 +959,9 @@ export default function EmployeeDashboard() {
                       </div>
                       <div>
                         <p className="font-bold">Salon Geofence Active</p>
-                        <p className="text-muted text-sm">Allowed radius: <strong>50 meters</strong> from salon</p>
+                        <p className="text-muted text-sm">
+                          Branch: <strong>{profileData?.user?.branch === 'RR_NAGAR' ? 'RR Nagar' : 'Nagarbhavi'}</strong> • Radius: <strong>50 meters</strong>
+                        </p>
                       </div>
                     </div>
                     <span className="badge badge-present">ACTIVE</span>
@@ -1202,7 +1215,7 @@ export default function EmployeeDashboard() {
                           }}
                           onClick={() => {
                             setAdminAttFilter(f);
-                            fetchAdminAttendance(f, adminAttDateFrom, adminAttDateTo, adminAttEmpFilter);
+                            fetchAdminAttendance(f, adminAttDateFrom, adminAttDateTo, adminAttEmpFilter, adminAttBranchFilter);
                           }}
                         >
                           {f === 'today' ? 'Today' : f === 'week' ? 'Last 7 Days' : f === 'month' ? 'This Month' : 'All Records'}
@@ -1248,25 +1261,40 @@ export default function EmployeeDashboard() {
                         <button
                           className="btn-primary"
                           style={{ padding: '0.4rem 1rem', fontSize: '0.85rem', width: 'auto' }}
-                          onClick={() => fetchAdminAttendance('custom', adminAttDateFrom, adminAttDateTo, adminAttEmpFilter)}
+                          onClick={() => fetchAdminAttendance('custom', adminAttDateFrom, adminAttDateTo, adminAttEmpFilter, adminAttBranchFilter)}
                         >
                           Apply
                         </button>
                       </div>
                     )}
 
-                    {/* Employee filter dropdown */}
-                    <div style={{ marginLeft: 'auto' }}>
+                    {/* Filter Dropdowns: Branch & Employee */}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <select
+                        className="input-field"
+                        value={adminAttBranchFilter}
+                        onChange={(e) => {
+                          const val = e.target.value as 'all' | 'NAGARBHAVI' | 'RR_NAGAR';
+                          setAdminAttBranchFilter(val);
+                          fetchAdminAttendance(adminAttFilter, adminAttDateFrom, adminAttDateTo, adminAttEmpFilter, val);
+                        }}
+                        style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', minWidth: '150px' }}
+                      >
+                        <option value="all">🏢 All Branches</option>
+                        <option value="NAGARBHAVI">📍 Nagarbhavi</option>
+                        <option value="RR_NAGAR">📍 RR Nagar</option>
+                      </select>
+
                       <select
                         className="input-field"
                         value={adminAttEmpFilter}
                         onChange={(e) => {
                           setAdminAttEmpFilter(e.target.value);
-                          fetchAdminAttendance(adminAttFilter, adminAttDateFrom, adminAttDateTo, e.target.value);
+                          fetchAdminAttendance(adminAttFilter, adminAttDateFrom, adminAttDateTo, e.target.value, adminAttBranchFilter);
                         }}
                         style={{ padding: '0.45rem 0.75rem', fontSize: '0.85rem', minWidth: '170px' }}
                       >
-                        <option value="">All Employees</option>
+                        <option value="">👤 All Employees</option>
                         {adminAttEmployees.map((emp: any) => (
                           <option key={emp._id} value={emp._id}>{emp.name} ({emp.employeeId})</option>
                         ))}
@@ -1333,6 +1361,9 @@ export default function EmployeeDashboard() {
                                 <Calendar size={14} className="text-gold" />
                                 {formatDate(record.date)}
                               </span>
+                              <span className="badge" style={{ backgroundColor: (record.branch || emp?.branch) === 'RR_NAGAR' ? 'rgba(59, 130, 246, 0.12)' : 'rgba(16, 185, 129, 0.12)', color: (record.branch || emp?.branch) === 'RR_NAGAR' ? '#2563eb' : '#059669', fontSize: '0.72rem' }}>
+                                {(record.branch || emp?.branch) === 'RR_NAGAR' ? 'RR Nagar' : 'Nagarbhavi'}
+                              </span>
                               {record.status === 'PRESENT' && <span className="badge badge-present">PRESENT</span>}
                               {record.status === 'LATE' && <span className="badge badge-late">LATE</span>}
                               {record.status === 'ABSENT' && <span className="badge badge-absent">ABSENT</span>}
@@ -1364,7 +1395,7 @@ export default function EmployeeDashboard() {
                             <div className="flex justify-between items-center" style={{ marginTop: '0.75rem', paddingTop: '0.5rem', borderTop: '1px dashed var(--border-light)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                               <span className="flex items-center gap-1">
                                 <MapPin size={12} className="text-gold" />
-                                GPS verified — {Math.round(record.distanceFromSalon)}m from salon
+                                GPS verified ({record.branch === 'RR_NAGAR' ? 'RR Nagar' : 'Nagarbhavi'}) — {Math.round(record.distanceFromSalon)}m from branch
                               </span>
                               {!record.checkOutTime && record.checkInTime && (
                                 <span style={{ color: 'var(--status-late)', fontWeight: 600 }}>⚠ Not yet checked out</span>
@@ -1574,7 +1605,7 @@ export default function EmployeeDashboard() {
                   </div>
                   <div>
                     <p className="text-muted text-sm">Salon Branch</p>
-                    <p className="font-bold">New Duke & Duchess</p>
+                    <p className="font-bold">{profileData?.user?.branch === 'RR_NAGAR' ? 'RR Nagar' : 'Nagarbhavi'} (New Duke & Duchess)</p>
                   </div>
                   <div>
                     <p className="text-muted text-sm">Joining Date</p>
@@ -1856,6 +1887,9 @@ export default function EmployeeDashboard() {
                               <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>{emp.name}</h3>
                               <span className="badge" style={{ backgroundColor: '#f3f4f6', color: 'var(--text-main)', fontSize: '0.75rem' }}>
                                 {emp.employeeId}
+                              </span>
+                              <span className="badge" style={{ backgroundColor: emp.branch === 'RR_NAGAR' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: emp.branch === 'RR_NAGAR' ? '#2563eb' : '#059669', fontSize: '0.72rem', fontWeight: 600 }}>
+                                {emp.branch === 'RR_NAGAR' ? 'RR Nagar' : 'Nagarbhavi'}
                               </span>
                             </div>
                             <p className="text-muted text-sm">{emp.designation || 'Staff'} • {emp.department || 'Salon'}</p>
@@ -2148,6 +2182,23 @@ export default function EmployeeDashboard() {
                       </div>
                     </div>
 
+                    {/* Branch */}
+                    <div className="input-group">
+                      <label className="input-label">Assigned Salon Branch</label>
+                      <select
+                        className="input-field"
+                        value={editEmpBranch}
+                        onChange={(e) => setEditEmpBranch(e.target.value as 'NAGARBHAVI' | 'RR_NAGAR')}
+                        style={{ height: '44px' }}
+                      >
+                        <option value="NAGARBHAVI">📍 Nagarbhavi Branch (50m Geofence)</option>
+                        <option value="RR_NAGAR">📍 RR Nagar Branch (50m Geofence)</option>
+                      </select>
+                      <span className="text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+                        Staff GPS check-in verifies against this branch (fallback allows shift cover at other branch).
+                      </span>
+                    </div>
+
                     {/* Status */}
                     <div className="input-group">
                       <label className="input-label">Account Status</label>
@@ -2365,6 +2416,23 @@ export default function EmployeeDashboard() {
                         onChange={(e) => setNewEmpEmail(e.target.value)}
                         placeholder="staff@dukeduchess.com"
                       />
+                    </div>
+
+                    {/* Salon Branch */}
+                    <div className="input-group">
+                      <label className="input-label">Assigned Salon Branch *</label>
+                      <select
+                        className="input-field"
+                        value={newEmpBranch}
+                        onChange={(e) => setNewEmpBranch(e.target.value as 'NAGARBHAVI' | 'RR_NAGAR')}
+                        style={{ height: '44px' }}
+                      >
+                        <option value="NAGARBHAVI">📍 Nagarbhavi Branch (50m Geofence)</option>
+                        <option value="RR_NAGAR">📍 RR Nagar Branch (50m Geofence)</option>
+                      </select>
+                      <span className="text-muted text-sm" style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>
+                        Staff clock-in GPS is verified against their assigned branch (50m radius).
+                      </span>
                     </div>
 
                     <div className="input-group">

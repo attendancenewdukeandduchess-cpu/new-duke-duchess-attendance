@@ -13,6 +13,7 @@ export interface IAttendance extends Document {
   checkOutLongitude?: number;
   gpsAccuracy?: number;
   distanceFromSalon?: number;
+  branch?: string;
   status: 'PRESENT' | 'LATE' | 'ABSENT';
 }
 
@@ -29,6 +30,7 @@ const AttendanceSchema = new Schema<IAttendance>({
   checkOutLongitude:  { type: Number },
   gpsAccuracy:        { type: Number },
   distanceFromSalon:  { type: Number },
+  branch:             { type: String, default: 'NAGARBHAVI' },
   status:             { type: String, enum: ['PRESENT', 'LATE', 'ABSENT'], default: 'PRESENT' },
 }, { timestamps: true });
 

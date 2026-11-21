@@ -7,6 +7,7 @@ export interface IAttendanceAttempt extends Document {
   longitude: number;
   accuracy: number;
   distance: number;
+  branch?: string;
   selfie?: string;
   rejectionReason: string;
 }
@@ -18,6 +19,7 @@ const AttendanceAttemptSchema = new Schema<IAttendanceAttempt>({
   longitude:       { type: Number, required: true },
   accuracy:        { type: Number, required: true },
   distance:        { type: Number, required: true },
+  branch:          { type: String },
   selfie:          { type: String },
   rejectionReason: { type: String, required: true },
 }, { timestamps: true });

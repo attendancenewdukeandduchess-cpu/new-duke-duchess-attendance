@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const { employeeId, name, mobile, email, designation, department, baseSalary, password, faceDescriptor } = await req.json();
+  const { employeeId, name, mobile, email, designation, department, baseSalary, password, faceDescriptor, branch } = await req.json();
   
   if (!employeeId || !name || !password) {
     return NextResponse.json({ error: 'Employee ID, name, and password are required.' }, { status: 400 });
@@ -60,6 +60,7 @@ export async function POST(req: Request) {
       designation: designation ? designation.trim() : 'Stylist',
       department: department ? department.trim() : 'Styling',
       baseSalary: baseSalary ? Number(baseSalary) : 0,
+      branch: (branch === 'RR_NAGAR' || branch === 'NAGARBHAVI') ? branch : 'NAGARBHAVI',
       password: hashed,
       role: 'EMPLOYEE',
       status: 'ACTIVE',
