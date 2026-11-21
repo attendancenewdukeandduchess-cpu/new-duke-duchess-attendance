@@ -701,6 +701,12 @@ export default function DukeDuchessBillingApp() {
     setInvoices([newInv, ...invoices]);
     // Save to MongoDB
     fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
+    setTimeout(() => {
+      fetch('/api/billing/customers')
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setCustomers(data); })
+        .catch(() => {});
+    }, 600);
     setNewInvoiceModal(false);
     setInvCustomer('');
     setReceiptInvoice(newInv);
@@ -764,24 +770,30 @@ export default function DukeDuchessBillingApp() {
     const serviceNames = cartItems.map(c => `${c.name} x${c.qty}`).join(', ');
     const customerName = posCustomer || 'Walk-in Client';
 
-    // Auto-add new customer if phone was searched and no existing match found
-    if (phoneLookupStatus === 'new' && posPhone.trim() && customerName !== 'Walk-in Client') {
-      const newId = `CUST-${String(customers.length + 1).padStart(3, '0')}`;
-      const newCust = { id: newId, name: customerName, phone: posPhone.trim(), email: '', visits: 1, balance: 0, tag: 'Regular' };
-      setCustomers(prev => [...prev, newCust]);
-      // Save new customer to MongoDB
-      fetch('/api/billing/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newCust) });
-    } else if (phoneLookupStatus === 'found' && posPhone.trim()) {
-      // Increment visit count for existing customer
-      const normalized = posPhone.replace(/\s+/g, '');
-      setCustomers(prev => prev.map(c => {
-        if (c.phone.replace(/\s+/g, '').includes(normalized)) {
-          const updated = { ...c, visits: c.visits + 1 };
-          fetch(`/api/billing/customers/${c.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ visits: updated.visits }) });
-          return updated;
-        }
-        return c;
-      }));
+    // Auto-add or update customer whenever a bill is generated
+    const cleanPhone = posPhone.trim();
+    if (customerName && customerName !== 'Walk-in Client') {
+      const normalizedPhone = cleanPhone.replace(/\D/g, '');
+      const existing = customers.find(c => 
+        (normalizedPhone && c.phone && c.phone.replace(/\D/g, '').includes(normalizedPhone)) ||
+        (c.name.trim().toLowerCase() === customerName.toLowerCase())
+      );
+
+      if (existing) {
+        setCustomers(prev => prev.map(c => c.id === existing.id ? { ...c, visits: c.visits + 1, phone: c.phone || cleanPhone } : c));
+      } else {
+        const nextIdNum = customers.length + 1;
+        const newCust = {
+          id: `CUST-${String(nextIdNum).padStart(3, '0')}`,
+          name: customerName,
+          phone: cleanPhone,
+          email: '',
+          visits: 1,
+          balance: 0,
+          tag: 'Regular' as const
+        };
+        setCustomers(prev => [newCust, ...prev]);
+      }
     }
 
     const billItems: InvoiceItem[] = cartItems.map(c => ({
@@ -815,6 +827,12 @@ export default function DukeDuchessBillingApp() {
     setInvoices(prev => [newInv, ...prev]);
     // Save invoice to MongoDB
     fetch('/api/billing/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newInv) });
+    setTimeout(() => {
+      fetch('/api/billing/customers')
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setCustomers(data); })
+        .catch(() => {});
+    }, 600);
     setBillSuccess(true);
     setReceiptInvoice(newInv);
     openWhatsAppReceipt(newInv);
