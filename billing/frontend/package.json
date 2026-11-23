@@ -7,6 +7,9 @@
     "build": "next build",
     "start": "next start -p 3001"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "dependencies": {
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
