@@ -112,26 +112,30 @@ export async function getFaceDescriptor(
   await loadFaceModels();
   const fa = await getFaceApi();
 
-  try {
-    // Try SSD first for highest accuracy descriptor
-    if (fa.nets.ssdMobilenetv1.isLoaded && fa.nets.faceRecognitionNet.isLoaded) {
+  // Try SSD first for highest accuracy descriptor
+  if (fa.nets.ssdMobilenetv1.isLoaded && fa.nets.faceRecognitionNet.isLoaded) {
+    try {
       const detection = await fa
-        .detectSingleFace(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.35 }))
+        .detectSingleFace(imageElement, new fa.SsdMobilenetv1Options({ minConfidence: 0.3 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
       if (detection?.descriptor) return detection.descriptor;
+    } catch (ssdErr) {
+      console.warn('SSD face detection failed on device, trying TinyFaceDetector fallback:', ssdErr);
     }
+  }
 
-    // Fallback to TinyFaceDetector
-    if (fa.nets.tinyFaceDetector.isLoaded && fa.nets.faceRecognitionNet.isLoaded) {
+  // Fallback to TinyFaceDetector (lighter, lower memory requirement, works on all mobile/Android)
+  if (fa.nets.tinyFaceDetector.isLoaded && fa.nets.faceRecognitionNet.isLoaded) {
+    try {
       const detection = await fa
-        .detectSingleFace(imageElement, new fa.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.3 }))
+        .detectSingleFace(imageElement, new fa.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.25 }))
         .withFaceLandmarks()
         .withFaceDescriptor();
       if (detection?.descriptor) return detection.descriptor;
+    } catch (tinyErr) {
+      console.warn('TinyFaceDetector face detection failed:', tinyErr);
     }
-  } catch (err) {
-    console.error('Error getting face descriptor:', err);
   }
 
   return null;
@@ -140,7 +144,7 @@ export async function getFaceDescriptor(
 export function compareFaceDescriptors(
   descriptor1: Float32Array | number[],
   descriptor2: Float32Array | number[],
-  threshold = 0.55
+  threshold = 0.60
 ): boolean {
   if (typeof window === 'undefined') return false;
   if (!faceapi) return false;

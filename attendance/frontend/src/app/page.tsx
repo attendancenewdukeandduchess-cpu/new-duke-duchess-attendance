@@ -670,50 +670,84 @@ export default function EmployeeDashboard() {
 
   const processGPS = (selfieData: string) => {
     setStep('GPS');
-    if (!navigator.geolocation) {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
       setErrorMsg('Geolocation is not supported by your browser.');
       setStep('ERROR');
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        try {
-          const type = (attendance?.checkInTime && !attendance?.checkOutTime) ? 'CHECK_OUT' : 'CHECK_IN';
-          setLastAction(type);
-          if (attendance?.checkInTime) {
-            setCheckoutCheckInTime(attendance.checkInTime);
-          }
-          const res = await fetch('/api/attendance', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ latitude, longitude, accuracy, selfie: selfieData, type })
-          });
-          
-          const data = await res.json();
-          if (res.ok) {
-            playBeep(type);
-            setStep('SUCCESS');
-            fetchAttendance();
-            fetchHistory();
-            fetchProfile();
-            if (isAdmin) fetchEmployees();
-          } else {
-            setErrorMsg(data.error || 'Attendance rejected.');
-            if (data.distance) setErrorDistance(data.distance);
-            setStep('ERROR');
-          }
-        } catch (e) {
-          setErrorMsg('Network error.');
+    let isHandled = false;
+
+    const submitLocation = async (position: GeolocationPosition) => {
+      if (isHandled) return;
+      isHandled = true;
+      const { latitude, longitude, accuracy } = position.coords;
+      try {
+        const type = (attendance?.checkInTime && !attendance?.checkOutTime) ? 'CHECK_OUT' : 'CHECK_IN';
+        setLastAction(type);
+        if (attendance?.checkInTime) {
+          setCheckoutCheckInTime(attendance.checkInTime);
+        }
+        const res = await fetch('/api/attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latitude, longitude, accuracy, selfie: selfieData, type })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+          playBeep(type);
+          setStep('SUCCESS');
+          fetchAttendance();
+          fetchHistory();
+          fetchProfile();
+          if (isAdmin) fetchEmployees();
+        } else {
+          setErrorMsg(data.error || 'Attendance rejected.');
+          if (data.distance) setErrorDistance(data.distance);
           setStep('ERROR');
         }
-      },
-      (err) => {
-        setErrorMsg('Please enable precise location and try again.');
+      } catch (e) {
+        setErrorMsg('Network error while recording attendance. Please check your internet connection.');
         setStep('ERROR');
+      }
+    };
+
+    const handleGpsError = (err: GeolocationPositionError) => {
+      if (isHandled) return;
+      isHandled = true;
+      let msg = 'Could not acquire your location. Please ensure phone GPS is enabled and try again.';
+      if (err.code === 1) { // PERMISSION_DENIED
+        msg = 'Location permission was denied. Please allow location access for this site in your browser settings (tap the lock icon in the address bar).';
+      } else if (err.code === 2) { // POSITION_UNAVAILABLE
+        msg = 'GPS location unavailable. Please make sure location services are switched ON in your phone settings.';
+      } else if (err.code === 3) { // TIMEOUT
+        msg = 'Location request timed out. Please step near a window or connect to salon Wi-Fi and try again.';
+      }
+      setErrorMsg(msg);
+      setStep('ERROR');
+    };
+
+    // Primary: High-accuracy GPS with generous 15s timeout and 30s cache
+    navigator.geolocation.getCurrentPosition(
+      (pos) => submitLocation(pos),
+      (primaryErr) => {
+        // If permission was denied, do not retry
+        if (primaryErr.code === 1) {
+          handleGpsError(primaryErr);
+          return;
+        }
+
+        console.warn('High-accuracy GPS attempt failed or timed out on Android/mobile, trying fallback:', primaryErr);
+
+        // Fallback: Standard fused / Wi-Fi / cell network location (fast & reliable indoors on Android!)
+        navigator.geolocation.getCurrentPosition(
+          (fallbackPos) => submitLocation(fallbackPos),
+          (fallbackErr) => handleGpsError(fallbackErr),
+          { enableHighAccuracy: false, timeout: 15000, maximumAge: 120000 }
+        );
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
   };
 
@@ -1091,7 +1125,10 @@ export default function EmployeeDashboard() {
                 <MapPin size={48} className="text-gold" style={{ marginBottom: '1rem', animation: 'pulse 2s infinite' }} />
                 <h2>Verifying Your Location...</h2>
                 <p className="text-muted" style={{ marginTop: '0.5rem' }}>
-                  Confirming your distance from salon (must be within 50 meters).
+                  Acquiring GPS & Wi-Fi location... Confirming you are at the salon.
+                </p>
+                <p style={{ fontSize: '0.8rem', color: '#888', marginTop: '0.75rem' }}>
+                  Please keep this screen open while we verify your coordinates.
                 </p>
               </div>
             )}

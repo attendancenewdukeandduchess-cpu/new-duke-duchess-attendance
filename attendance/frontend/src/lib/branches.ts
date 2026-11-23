@@ -18,7 +18,7 @@ export const BRANCHES: Record<BranchId, BranchInfo> = {
     address: '1st Floor, Abhiman Arcade, Muddenapalya Main Rd, near Ayodhya Samrat Hotel, Nagarbhavi, Bengaluru 560072',
     latitude: 12.968489,
     longitude: 77.501320,
-    allowedRadius: 50,
+    allowedRadius: 65,
   },
   RR_NAGAR: {
     id: 'RR_NAGAR',
@@ -27,7 +27,7 @@ export const BRANCHES: Record<BranchId, BranchInfo> = {
     address: 'Rajarajeshwari Nagar (RR Nagar), Bengaluru 560098',
     latitude: 12.913956,
     longitude: 77.507265,
-    allowedRadius: 50,
+    allowedRadius: 65,
   },
 };
 

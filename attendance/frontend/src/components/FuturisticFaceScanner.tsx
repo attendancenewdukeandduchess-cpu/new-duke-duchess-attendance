@@ -174,41 +174,65 @@ export default function FuturisticFaceScanner({
     let currentStream: MediaStream | null = null;
 
       const startMedia = async () => {
+        let stream: MediaStream | null = null;
         try {
           // Attempt 1: Optimal HD user-facing webcam
-          const stream = await navigator.mediaDevices.getUserMedia({
+          stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
             audio: false
           });
+        } catch (firstErr: any) {
+          console.warn('HD camera attempt failed, trying front webcam without resolution constraints...', firstErr);
+          try {
+            // Attempt 2: Flexible front-facing webcam (essential for Android phones!)
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: 'user' },
+              audio: false
+            });
+          } catch (secondErr: any) {
+            console.warn('Flexible front camera failed, trying soft facingMode...', secondErr);
+            try {
+              // Attempt 3: Soft user preference
+              stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'user' } },
+                audio: false
+              });
+            } catch (thirdErr: any) {
+              console.warn('Soft user camera failed, trying basic video...', thirdErr);
+              try {
+                // Attempt 4: Basic video fallback
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+              } catch (finalErr: any) {
+                console.warn('Camera access completely unavailable:', finalErr);
+                const isBusy = finalErr?.name === 'NotReadableError' || finalErr?.message?.includes('in use');
+                setCameraError(
+                  isBusy
+                    ? 'Camera is currently locked by another application. Using High-Definition Demo Mode.'
+                    : 'Camera permission denied or device not found. Using High-Definition Demo Mode.'
+                );
+                setUseCamera(false);
+                return;
+              }
+            }
+          }
+        }
+
+        if (stream) {
           currentStream = stream;
           if (videoRef.current) {
             videoRef.current.srcObject = stream;
-            videoRef.current.play().catch(() => {});
+            videoRef.current.muted = true;
+            videoRef.current.defaultMuted = true;
+            videoRef.current.setAttribute('playsinline', 'true');
+            videoRef.current.setAttribute('webkit-playsinline', 'true');
+            try {
+              await videoRef.current.play();
+            } catch (playErr) {
+              console.warn('Video play error on mobile:', playErr);
+            }
           }
           setStatusText('CAMERA ONLINE // TARGET SENSOR ACTIVE');
           setCameraError(null);
-        } catch (firstErr: any) {
-          console.warn('HD camera attempt failed, trying basic webcam...', firstErr);
-          try {
-            // Attempt 2: Basic webcam without strict resolution constraints
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-            currentStream = stream;
-            if (videoRef.current) {
-              videoRef.current.srcObject = stream;
-              videoRef.current.play().catch(() => {});
-            }
-            setStatusText('CAMERA ONLINE // STANDARD FEED');
-            setCameraError(null);
-          } catch (finalErr: any) {
-            console.warn('Camera access unavailable:', finalErr);
-            const isBusy = finalErr?.name === 'NotReadableError' || finalErr?.message?.includes('in use');
-            setCameraError(
-              isBusy
-                ? 'Camera is currently locked by another application. Using High-Definition Demo Mode.'
-                : 'Camera permission denied or device not found. Using High-Definition Demo Mode.'
-            );
-            setUseCamera(false);
-          }
         }
       };
 
@@ -726,7 +750,11 @@ export default function FuturisticFaceScanner({
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
           selfieData = canvas.toDataURL('image/jpeg', 0.85);
         }
-        liveDescriptor = await getFaceDescriptor(videoRef.current);
+        // Pass canvas first for mobile/Android stability, then fallback to video if needed
+        liveDescriptor = await getFaceDescriptor(canvas);
+        if (!liveDescriptor && videoRef.current) {
+          liveDescriptor = await getFaceDescriptor(videoRef.current);
+        }
       } else if (demoImgRef.current) {
         canvas.width = 640;
         canvas.height = 640;

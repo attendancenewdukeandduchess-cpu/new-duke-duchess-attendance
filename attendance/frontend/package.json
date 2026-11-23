@@ -9,6 +9,9 @@
     "lint": "eslint",
     "postinstall": "node download-models.js"
   },
+  "engines": {
+    "node": "24.x"
+  },
   "dependencies": {
     "@vladmandic/face-api": "^1.7.15",
     "bcryptjs": "^3.0.3",
