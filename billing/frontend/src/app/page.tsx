@@ -749,7 +749,9 @@ export default function DukeDuchessBillingApp() {
   const [posPhone,      setPosPhone]      = useState('');
   const [discountType,  setDiscountType]  = useState<'percent' | 'flat'>('percent');
   const [discountValue, setDiscountValue] = useState('');
-  const [gstRate,       setGstRate]       = useState<0 | 5 | 12 | 18>(18);
+  const [gstRate,       setGstRate]       = useState<number>(0);
+  const [isCustomGst,   setIsCustomGst]   = useState<boolean>(false);
+  const [customGst,     setCustomGst]     = useState<string>('');
   const [taxType,       setTaxType]       = useState<'exclusive' | 'inclusive'>('exclusive');
   const [posPayMode,    setPosPayMode]    = useState('UPI');
   const [posServiceTab, setPosServiceTab] = useState<'men' | 'women' | 'products'>('men');
@@ -938,7 +940,11 @@ export default function DukeDuchessBillingApp() {
       setCartItems([]);
       setPosCustomer(''); setPosPhone('');
       setDefaultStylist('');
-      setDiscountValue(''); setGstRate(18); setTaxType('exclusive');
+      setDiscountValue('');
+      setGstRate(0);
+      setIsCustomGst(false);
+      setCustomGst('');
+      setTaxType('exclusive');
       setPhoneLookupStatus('idle'); setPhoneLookupMsg('');
     }, 2500);
   };
@@ -1923,17 +1929,81 @@ export default function DukeDuchessBillingApp() {
                     </button>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <div style={{ display: 'flex', gap: '0.4rem', marginBottom: isCustomGst ? '0.5rem' : '0' }}>
                   {([0, 5, 12, 18] as const).map(rate => (
-                    <button key={rate} onClick={() => setGstRate(rate)} style={{
-                      flex: 1, padding: '0.4rem 0', borderRadius: '7px',
-                      border: gstRate === rate ? '2px solid var(--accent-gold)' : '1px solid var(--border-color)',
-                      backgroundColor: gstRate === rate ? 'rgba(212,175,55,0.15)' : 'transparent',
-                      color: gstRate === rate ? 'var(--accent-gold)' : 'var(--text-muted)',
-                      fontWeight: gstRate === rate ? 700 : 500, fontSize: '0.78rem', cursor: 'pointer'
-                    }}>{rate}%</button>
+                    <button
+                      key={rate}
+                      type="button"
+                      onClick={() => {
+                        setGstRate(rate);
+                        setIsCustomGst(false);
+                        setCustomGst('');
+                      }}
+                      style={{
+                        flex: 1, padding: '0.4rem 0', borderRadius: '7px',
+                        border: (gstRate === rate && !isCustomGst) ? '2px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                        backgroundColor: (gstRate === rate && !isCustomGst) ? 'rgba(212,175,55,0.15)' : 'transparent',
+                        color: (gstRate === rate && !isCustomGst) ? 'var(--accent-gold)' : 'var(--text-muted)',
+                        fontWeight: (gstRate === rate && !isCustomGst) ? 700 : 500, fontSize: '0.78rem', cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {rate}%
+                    </button>
                   ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomGst(true);
+                    }}
+                    style={{
+                      flex: 1.25, padding: '0.4rem 0', borderRadius: '7px',
+                      border: isCustomGst ? '2px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                      backgroundColor: isCustomGst ? 'rgba(212,175,55,0.15)' : 'transparent',
+                      color: isCustomGst ? 'var(--accent-gold)' : 'var(--text-muted)',
+                      fontWeight: isCustomGst ? 700 : 500, fontSize: '0.78rem', cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    Custom %
+                  </button>
                 </div>
+
+                {/* Custom GST Input Field */}
+                {isCustomGst && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', animation: 'fadeIn 0.2s ease' }}>
+                    <div style={{ position: 'relative', flex: 1 }}>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="any"
+                        autoFocus
+                        value={customGst}
+                        onChange={e => {
+                          const v = e.target.value;
+                          setCustomGst(v);
+                          const parsed = parseFloat(v);
+                          setGstRate(isNaN(parsed) ? 0 : Math.max(0, parsed));
+                        }}
+                        placeholder="Enter custom GST rate (e.g. 28)"
+                        style={{
+                          width: '100%',
+                          padding: '0.42rem 1.75rem 0.42rem 0.65rem',
+                          borderRadius: '7px',
+                          border: '1px solid var(--accent-gold)',
+                          backgroundColor: 'var(--bg-primary)',
+                          color: 'var(--accent-gold)',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <span style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', fontSize: '0.8rem', color: 'var(--accent-gold)', fontWeight: 800 }}>%</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bill Summary */}
