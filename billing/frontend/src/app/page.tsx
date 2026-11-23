@@ -34,14 +34,39 @@ import {
   DollarSign,
   FileSpreadsheet,
   PieChart,
-  Award
+  Award,
+  Scissors
 } from 'lucide-react';
 import { SALON_LOGO_DATA_URI } from './logoDataUri';
 import { initialMenSections, initialWomenSections, initialProductItems } from './initialCatalogue';
 import { downloadReceiptPdf } from '@/lib/pdfReceipt';
 
+// Stylist type
+export type Stylist = {
+  id?: string;
+  name: string;
+  designation?: string;
+};
+
+// Known salon stylists (attendance database + fallback default)
+const DEFAULT_STYLISTS: Stylist[] = [
+  { id: 'E001', name: 'Priya Sharma', designation: 'Senior Hair Stylist' },
+  { id: 'E008', name: 'Puja Chetry', designation: 'Stylist' },
+  { id: 'E009', name: 'Mohamed Rihan', designation: 'Senior Stylist' },
+  { id: 'E011', name: 'Raj R', designation: 'Make up Artist' },
+  { id: '001',  name: 'Asha', designation: 'Senior Stylist' },
+  { id: '12345', name: 'Ruthvik', designation: 'Senior Stylist' },
+];
+
 // POS cart item type
-type CartItem = { id: string; name: string; price: number; qty: number };
+type CartItem = {
+  cartItemId?: string;
+  id: string;
+  name: string;
+  price: number;
+  qty: number;
+  stylist?: string;
+};
 // Catalogue section type
 type CatalogueSection = { section: string; items: { id: string; name: string; price: number }[] };
 
@@ -399,7 +424,10 @@ function generateWhatsAppReceiptMessage(inv: Invoice) {
       });
 
   const itemsText = itemsList
-    .map(i => `✂️ *${i.name}* (Qty: ${i.qty}) - ₹${Number(i.amount).toFixed(2)}`)
+    .map(i => {
+      const stylistTag = i.stylist && i.stylist !== '-' ? ` [Stylist: ${i.stylist}]` : '';
+      return `✂️ *${i.name}*${stylistTag} (Qty: ${i.qty}) - ₹${Number(i.amount).toFixed(2)}`;
+    })
     .join('\n');
 
   const dateTimeStr = formatReceiptDateTime(inv.date);
@@ -674,6 +702,7 @@ export default function DukeDuchessBillingApp() {
   const [newInvoiceModal, setNewInvoiceModal] = useState(false);
   const [invCustomer, setInvCustomer] = useState('');
   const [invService, setInvService] = useState('Advance Haircut (Hair bomb Included)');
+  const [invStylist, setInvStylist] = useState('');
   const [invAmount, setInvAmount] = useState('1499');
   const [invPayMode, setInvPayMode] = useState('UPI');
 
@@ -686,7 +715,7 @@ export default function DukeDuchessBillingApp() {
       customer: invCustomer || 'Walk-in Client',
       phone: '',
       service: invService,
-      items: [{ name: invService, qty: 1, rate: itemAmt, amount: itemAmt, stylist: '-' }],
+      items: [{ name: invService, qty: 1, rate: itemAmt, amount: itemAmt, stylist: invStylist.trim() || '-' }],
       subtotal: itemAmt,
       discount: 0,
       discountAmount: 0,
@@ -727,6 +756,14 @@ export default function DukeDuchessBillingApp() {
   const [posSearch,     setPosSearch]     = useState('');
   const [billSuccess,   setBillSuccess]   = useState(false);
 
+  // ── Stylist State ─────────────────────────────────────────────────────────
+  const [stylists, setStylists] = useState<Stylist[]>(DEFAULT_STYLISTS);
+  const [defaultStylist, setDefaultStylist] = useState<string>('');
+  const [showAddStylistModal, setShowAddStylistModal] = useState<boolean>(false);
+  const [newStylistName, setNewStylistName] = useState<string>('');
+  const [newStylistDesig, setNewStylistDesig] = useState<string>('Stylist');
+  const [targetCartItemIdForNewStylist, setTargetCartItemIdForNewStylist] = useState<string | null>(null);
+
   // ── Reports & Analytics State ──────────────────────────────────────────
   const [reportRange, setReportRange] = useState<'all' | 'today' | '7days' | 'month' | 'custom'>('all');
   const [reportFrom,  setReportFrom]  = useState('');
@@ -734,17 +771,76 @@ export default function DukeDuchessBillingApp() {
 
   const addToCart = (item: { id: string; name: string; price: number }) => {
     setCartItems(prev => {
-      const existing = prev.find(c => c.id === item.id);
-      if (existing) return prev.map(c => c.id === item.id ? { ...c, qty: c.qty + 1 } : c);
-      return [...prev, { ...item, qty: 1 }];
+      const assignedStylist = defaultStylist.trim();
+      const existing = prev.find(c => c.id === item.id && (c.stylist || '') === assignedStylist);
+      if (existing) {
+        return prev.map(c => ((c.cartItemId && c.cartItemId === existing.cartItemId) || (!c.cartItemId && c.id === item.id)) ? { ...c, qty: c.qty + 1 } : c);
+      }
+      return [
+        ...prev,
+        {
+          cartItemId: `${item.id}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          id: item.id,
+          name: item.name,
+          price: item.price,
+          qty: 1,
+          stylist: assignedStylist
+        }
+      ];
     });
   };
 
-  const updateQty = (id: string, delta: number) => {
-    setCartItems(prev => prev.map(c => c.id === id ? { ...c, qty: Math.max(1, c.qty + delta) } : c));
+  const updateQty = (identifier: string, delta: number) => {
+    setCartItems(prev => prev.map(c => (c.cartItemId === identifier || c.id === identifier) ? { ...c, qty: Math.max(1, c.qty + delta) } : c));
   };
 
-  const removeFromCart = (id: string) => setCartItems(prev => prev.filter(c => c.id !== id));
+  const removeFromCart = (identifier: string) => {
+    setCartItems(prev => prev.filter(c => c.cartItemId !== identifier && c.id !== identifier));
+  };
+
+  const updateItemStylist = (identifier: string, stylist: string) => {
+    setCartItems(prev => prev.map(c => (c.cartItemId === identifier || c.id === identifier) ? { ...c, stylist } : c));
+  };
+
+  const handleAddNewStylist = async () => {
+    const trimmed = newStylistName.trim();
+    if (!trimmed) {
+      alert('Please enter stylist name');
+      return;
+    }
+    const desig = newStylistDesig.trim() || 'Stylist';
+    const newSt: Stylist = {
+      id: `STY-${Date.now().toString().slice(-4)}`,
+      name: trimmed,
+      designation: desig
+    };
+
+    setStylists(prev => {
+      if (prev.some(s => s.name.toLowerCase() === trimmed.toLowerCase())) return prev;
+      return [...prev, newSt];
+    });
+
+    if (targetCartItemIdForNewStylist === 'default') {
+      setDefaultStylist(trimmed);
+    } else if (targetCartItemIdForNewStylist) {
+      updateItemStylist(targetCartItemIdForNewStylist, trimmed);
+    }
+
+    setShowAddStylistModal(false);
+    setNewStylistName('');
+    setNewStylistDesig('Stylist');
+    setTargetCartItemIdForNewStylist(null);
+
+    try {
+      await fetch('/api/billing/stylists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: trimmed, designation: desig })
+      });
+    } catch (e) {
+      console.warn('Failed to persist stylist to DB:', e);
+    }
+  };
 
   const cartSubtotal = cartItems.reduce((s, c) => s + c.price * c.qty, 0);
   const discountAmt  = discountValue
@@ -801,7 +897,7 @@ export default function DukeDuchessBillingApp() {
       qty: c.qty,
       rate: c.price,
       amount: c.price * c.qty,
-      stylist: '-'
+      stylist: c.stylist && c.stylist.trim() ? c.stylist.trim() : '-'
     }));
 
     const nextNum = invoices.length + 1;
@@ -841,6 +937,7 @@ export default function DukeDuchessBillingApp() {
       setBillSuccess(false);
       setCartItems([]);
       setPosCustomer(''); setPosPhone('');
+      setDefaultStylist('');
       setDiscountValue(''); setGstRate(18); setTaxType('exclusive');
       setPhoneLookupStatus('idle'); setPhoneLookupMsg('');
     }, 2500);
@@ -850,10 +947,11 @@ export default function DukeDuchessBillingApp() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [custRes, invRes, catRes] = await Promise.all([
+        const [custRes, invRes, catRes, styRes] = await Promise.all([
           fetch('/api/billing/customers'),
           fetch('/api/billing/invoices'),
           fetch('/api/billing/catalogue'),
+          fetch('/api/billing/stylists').catch(() => null),
         ]);
         const custData = await custRes.json();
         const invData  = await invRes.json();
@@ -863,6 +961,13 @@ export default function DukeDuchessBillingApp() {
         if (catData.menSections) setMenSections(catData.menSections);
         if (catData.womenSections) setWomenSections(catData.womenSections);
         if (catData.productItems) setProductItems(catData.productItems);
+
+        if (styRes && styRes.ok) {
+          const styData = await styRes.json();
+          if (Array.isArray(styData.stylists) && styData.stylists.length > 0) {
+            setStylists(styData.stylists);
+          }
+        }
       } catch (err) {
         console.error('Failed to load billing data from MongoDB:', err);
       }
@@ -1631,6 +1736,43 @@ export default function DukeDuchessBillingApp() {
                     style={{ width: '100%', padding: '0.45rem 0.6rem 0.45rem 1.75rem', borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: phoneLookupStatus === 'found' ? 'rgba(16,185,129,0.06)' : 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.82rem', outline: 'none', boxSizing: 'border-box' }}
                   />
                 </div>
+
+                {/* Default Stylist Selector */}
+                <div style={{ position: 'relative', marginTop: '0.5rem' }}>
+                  <Scissors size={13} color="var(--accent-gold)" style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)' }} />
+                  <select
+                    value={defaultStylist}
+                    onChange={e => {
+                      if (e.target.value === '__NEW__') {
+                        setTargetCartItemIdForNewStylist('default');
+                        setShowAddStylistModal(true);
+                      } else {
+                        setDefaultStylist(e.target.value);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '0.45rem 0.6rem 0.45rem 1.75rem',
+                      borderRadius: '7px',
+                      border: defaultStylist ? '1px solid var(--accent-gold)' : '1px solid var(--border-color)',
+                      backgroundColor: defaultStylist ? 'rgba(212,175,55,0.06)' : 'var(--bg-primary)',
+                      color: defaultStylist ? 'var(--accent-gold)' : 'var(--text-muted)',
+                      fontSize: '0.82rem',
+                      fontWeight: defaultStylist ? 600 : 400,
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="" style={{ background: '#1e1e1e', color: '#888' }}>-- Default Stylist (Auto-tags to cart) --</option>
+                    {stylists.map(st => (
+                      <option key={st.id || st.name} value={st.name} style={{ background: '#1e1e1e', color: '#fff' }}>
+                        ✂️ {st.name} {st.designation ? `(${st.designation})` : ''}
+                      </option>
+                    ))}
+                    <option value="__NEW__" style={{ background: '#1e1e1e', color: 'var(--accent-gold)', fontWeight: 'bold' }}>+ Add New Stylist...</option>
+                  </select>
+                </div>
               </div>
 
               {/* Cart Items */}
@@ -1650,22 +1792,76 @@ export default function DukeDuchessBillingApp() {
                     <div style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Click ➕ on any service to add</div>
                   </div>
                 ) : (
-                  <div style={{ maxHeight: '220px', overflowY: 'auto' }}>
-                    {cartItems.map(item => (
-                      <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', borderBottom: '1px solid var(--border-color)' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>₹{item.price.toLocaleString('en-IN')} each</div>
+                  <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                    {cartItems.map((item, idx) => {
+                      const itemKey = item.cartItemId || `${item.id}-${idx}`;
+                      const identifier = item.cartItemId || item.id;
+                      return (
+                        <div key={itemKey} style={{ padding: '0.65rem 1rem', borderBottom: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          {/* Upper row: Item Name, Qty controls, Price, Delete */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.name}>
+                                {item.name}
+                              </div>
+                              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                ₹{item.price.toLocaleString('en-IN')} each
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
+                              <button onClick={() => updateQty(identifier, -1)} style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minus size={12} /></button>
+                              <span style={{ width: 24, textAlign: 'center', fontWeight: 700, color: 'var(--text-main)', fontSize: '0.85rem' }}>{item.qty}</span>
+                              <button onClick={() => updateQty(identifier, 1)} style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={12} /></button>
+                            </div>
+                            <div style={{ width: '60px', textAlign: 'right', fontWeight: 700, color: 'var(--accent-gold)', fontSize: '0.82rem', flexShrink: 0 }}>
+                              ₹{(item.price * item.qty).toLocaleString('en-IN')}
+                            </div>
+                            <button onClick={() => removeFromCart(identifier)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', flexShrink: 0, padding: 2 }} title="Remove item"><X size={15} /></button>
+                          </div>
+
+                          {/* Stylist Selector Badge / Row */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: item.stylist ? 'rgba(212,175,55,0.06)' : 'rgba(239,68,68,0.06)', padding: '0.3rem 0.5rem', borderRadius: '6px', border: item.stylist ? '1px solid rgba(212,175,55,0.25)' : '1px solid rgba(239,68,68,0.25)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: item.stylist ? 'var(--accent-gold)' : '#f87171' }}>
+                              <Scissors size={12} color={item.stylist ? 'var(--accent-gold)' : '#f87171'} />
+                              <span style={{ fontWeight: 700 }}>Stylist:</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                              <select
+                                value={item.stylist || ''}
+                                onChange={e => {
+                                  if (e.target.value === '__NEW__') {
+                                    setTargetCartItemIdForNewStylist(identifier);
+                                    setShowAddStylistModal(true);
+                                  } else {
+                                    updateItemStylist(identifier, e.target.value);
+                                  }
+                                }}
+                                style={{
+                                  padding: '0.2rem 0.45rem',
+                                  borderRadius: '5px',
+                                  border: item.stylist ? '1px solid rgba(212,175,55,0.4)' : '1px solid rgba(239,68,68,0.5)',
+                                  backgroundColor: item.stylist ? 'rgba(212,175,55,0.12)' : 'rgba(239,68,68,0.12)',
+                                  color: item.stylist ? 'var(--accent-gold)' : '#f87171',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 600,
+                                  outline: 'none',
+                                  cursor: 'pointer',
+                                  maxWidth: '185px'
+                                }}
+                              >
+                                <option value="" style={{ background: '#1e1e1e', color: '#888' }}>-- Assign Stylist --</option>
+                                {stylists.map(st => (
+                                  <option key={st.id || st.name} value={st.name} style={{ background: '#1e1e1e', color: '#fff' }}>
+                                    {st.name} {st.designation ? `(${st.designation})` : ''}
+                                  </option>
+                                ))}
+                                <option value="__NEW__" style={{ background: '#1e1e1e', color: 'var(--accent-gold)', fontWeight: 'bold' }}>+ Add New Stylist...</option>
+                              </select>
+                            </div>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', flexShrink: 0 }}>
-                          <button onClick={() => updateQty(item.id, -1)} style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Minus size={12} /></button>
-                          <span style={{ width: 24, textAlign: 'center', fontWeight: 700, color: 'var(--text-main)', fontSize: '0.85rem' }}>{item.qty}</span>
-                          <button onClick={() => updateQty(item.id, 1)} style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-main)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={12} /></button>
-                        </div>
-                        <div style={{ width: '60px', textAlign: 'right', fontWeight: 700, color: 'var(--accent-gold)', fontSize: '0.82rem', flexShrink: 0 }}>₹{(item.price * item.qty).toLocaleString('en-IN')}</div>
-                        <button onClick={() => removeFromCart(item.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#ef4444', flexShrink: 0 }}><X size={14} /></button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1892,6 +2088,18 @@ export default function DukeDuchessBillingApp() {
                         {/* Service + Date */}
                         <div>
                           <div style={{ fontSize: '0.83rem', color: 'var(--text-main)', fontWeight: 500, marginBottom: 2 }}>{inv.service}</div>
+                          {(() => {
+                            const stylistNames = inv.items && inv.items.length > 0
+                              ? Array.from(new Set(inv.items.map(it => it.stylist).filter((s): s is string => Boolean(s && s !== '-'))))
+                              : [];
+                            if (stylistNames.length === 0) return null;
+                            return (
+                              <div style={{ fontSize: '0.72rem', color: 'var(--accent-gold)', display: 'flex', alignItems: 'center', gap: '0.3rem', marginBottom: 2, fontWeight: 600 }}>
+                                <Scissors size={11} />
+                                <span>Stylist: {stylistNames.join(', ')}</span>
+                              </div>
+                            );
+                          })()}
                           <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>📅 {new Date(inv.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
                         </div>
 
@@ -2071,16 +2279,18 @@ export default function DukeDuchessBillingApp() {
 
           // Export CSV handler
           const handleExportCsv = () => {
-            const headers = ['Invoice ID', 'Date & Time', 'Customer Name', 'Phone', 'Services', 'Gross Subtotal', 'Discount', 'Taxable Amount', 'GST Rate', 'GST Amount', 'Total Paid', 'Payment Mode', 'Status'];
+            const headers = ['Invoice ID', 'Date & Time', 'Customer Name', 'Phone', 'Services', 'Stylist', 'Gross Subtotal', 'Discount', 'Taxable Amount', 'GST Rate', 'GST Amount', 'Total Paid', 'Payment Mode', 'Status'];
             const rows = filteredInvoices.map(inv => {
               const fin = computeInvoiceFinancials(inv);
               const servicesText = (inv.items && inv.items.length > 0) ? inv.items.map(it => `${it.name} (x${it.qty})`).join('; ') : (inv.service || '');
+              const stylistsText = (inv.items && inv.items.length > 0) ? Array.from(new Set(inv.items.map(it => it.stylist).filter((s): s is string => Boolean(s && s !== '-')))).join('; ') : '-';
               return [
                 inv.id,
                 `"${formatReceiptDateTime(inv.date)}"`,
                 `"${(inv.customer || '').replace(/"/g, '""')}"`,
                 `"${inv.phone || ''}"`,
                 `"${servicesText.replace(/"/g, '""')}"`,
+                `"${stylistsText.replace(/"/g, '""')}"`,
                 fin.grossSubtotal.toFixed(2),
                 fin.discountAmt.toFixed(2),
                 fin.taxableAmt.toFixed(2),
@@ -2877,6 +3087,22 @@ export default function DukeDuchessBillingApp() {
               </div>
 
               <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Assigned Stylist</label>
+                <select
+                  value={invStylist}
+                  onChange={(e) => setInvStylist(e.target.value)}
+                  style={{ width: '100%', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)' }}
+                >
+                  <option value="">-- Select Stylist (Optional) --</option>
+                  {stylists.map(st => (
+                    <option key={st.id || st.name} value={st.name}>
+                      {st.name} {st.designation ? `(${st.designation})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
                 <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Amount (₹)</label>
                 <input
                   type="number"
@@ -2916,6 +3142,52 @@ export default function DukeDuchessBillingApp() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Stylist Modal ── */}
+      {showAddStylistModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '1rem' }}>
+          <div style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '14px', padding: '1.75rem', width: '100%', maxWidth: '420px', position: 'relative', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }}>
+            <button onClick={() => { setShowAddStylistModal(false); setTargetCartItemIdForNewStylist(null); }} style={{ position: 'absolute', top: 14, right: 14, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={20} /></button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+              <div style={{ width: 36, height: 36, borderRadius: '8px', backgroundColor: 'rgba(212,175,55,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Scissors size={18} color="var(--accent-gold)" />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Add Salon Stylist</h3>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Register a stylist to assign on bills</span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.35rem', fontWeight: 600 }}>Stylist Full Name *</label>
+              <input
+                autoFocus
+                value={newStylistName}
+                onChange={e => setNewStylistName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddNewStylist()}
+                placeholder="e.g. Ananya Rao"
+                style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.35rem', fontWeight: 600 }}>Designation / Role</label>
+              <input
+                value={newStylistDesig}
+                onChange={e => setNewStylistDesig(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleAddNewStylist()}
+                placeholder="e.g. Senior Stylist, Barber, Make-up Artist"
+                style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '7px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-main)', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button onClick={() => { setShowAddStylistModal(false); setTargetCartItemIdForNewStylist(null); }} style={{ padding: '0.5rem 1rem', borderRadius: '7px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.82rem' }}>Cancel</button>
+              <button onClick={handleAddNewStylist} style={{ padding: '0.5rem 1.25rem', borderRadius: '7px', border: 'none', backgroundColor: 'var(--accent-gold)', color: '#000', fontWeight: 700, cursor: 'pointer', fontSize: '0.82rem' }}>Save Stylist</button>
+            </div>
           </div>
         </div>
       )}

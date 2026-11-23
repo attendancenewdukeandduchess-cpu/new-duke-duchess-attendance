@@ -31,6 +31,10 @@ export function getMongoClientPromise(): Promise<MongoClient> {
   }
 }
 
+export async function getMongoClient() {
+  return await getMongoClientPromise();
+}
+
 export async function getDb() {
   const c = await getMongoClientPromise();
   return c.db(dbName);
