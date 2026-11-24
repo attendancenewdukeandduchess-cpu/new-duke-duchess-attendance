@@ -11,6 +11,11 @@ export type InvoiceItem = {
   stylist?: string;
 };
 
+export type SplitPayment = {
+  mode: string;
+  amount: number;
+};
+
 export type Invoice = {
   id: string;
   customer: string;
@@ -29,6 +34,7 @@ export type Invoice = {
   gst: number;
   status: 'PAID' | 'UNPAID';
   mode: string;
+  splitDetails?: SplitPayment[];
 };
 
 export function computeInvoiceFinancials(inv: Invoice) {
@@ -198,10 +204,14 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
   doc.text('INVOICE DETAILS', col1Left, leftY);
   leftY += 5;
 
+  const payModeFormatted = (inv.splitDetails && inv.splitDetails.length > 0)
+    ? `SPLIT (${inv.splitDetails.map(s => `${s.mode}: Rs.${s.amount.toFixed(0)}`).join(', ')})`
+    : (inv.mode || 'CASH').toUpperCase();
+
   const leftLabels = [
     { label: 'Invoice No.', val: inv.id || 'INV-0001' },
     { label: 'Date & Time', val: dateTimeStr },
-    { label: 'Payment Mode', val: (inv.mode || 'CASH').toUpperCase() }
+    { label: 'Payment Mode', val: payModeFormatted }
   ];
 
   leftLabels.forEach(row => {
@@ -395,7 +405,7 @@ export function createInvoicePdfDoc(inv: Invoice): jsPDF {
 
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(80, 80, 80);
-  doc.text(` |  Paid via ${inv.mode || 'CASH'}   Thank you for your payment.`, margin + 46, y + 5.3);
+  doc.text(` |  Paid via ${payModeFormatted}   Thank you for your payment.`, margin + 46, y + 5.3);
 
   y += 14;
 

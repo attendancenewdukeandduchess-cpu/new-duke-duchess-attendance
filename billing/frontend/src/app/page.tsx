@@ -79,6 +79,11 @@ type InvoiceItem = {
   stylist?: string;
 };
 
+export type SplitPayment = {
+  mode: string;
+  amount: number;
+};
+
 // Invoice type
 type Invoice = {
   id: string;
@@ -98,6 +103,7 @@ type Invoice = {
   gst: number;
   status: 'PAID' | 'UNPAID';
   mode: string;
+  splitDetails?: SplitPayment[];
 };
 
 // Customer type
@@ -279,7 +285,13 @@ function generateReceiptHtmlString(inv: Invoice) {
         <div style="font-size: 12px; color: #374151; line-height: 1.7;">
           <div>Invoice No. &nbsp;&nbsp;&nbsp;&nbsp;: <strong style="color: #111;">${inv.id}</strong></div>
           <div>Date &amp; Time &nbsp;&nbsp;&nbsp;: <strong style="color: #111;">${dateTimeStr}</strong></div>
-          <div>Payment Mode : <strong style="color: #111; text-transform: uppercase;">${inv.mode}</strong></div>
+          <div>Payment Mode : <strong style="color: #111; text-transform: uppercase;">${inv.splitDetails && inv.splitDetails.length > 0 ? 'SPLIT' : inv.mode}</strong>
+            ${inv.splitDetails && inv.splitDetails.length > 0 ? `
+              <div style="font-size: 11px; color: #4b5563; margin-top: 3px; font-weight: 600;">
+                ${inv.splitDetails.map(s => `• ${s.mode}: ₹${Number(s.amount).toFixed(2)}`).join(' &nbsp;|&nbsp; ')}
+              </div>
+            ` : ''}
+          </div>
         </div>
       </div>
       <div>
@@ -339,7 +351,7 @@ function generateReceiptHtmlString(inv: Invoice) {
     <!-- Payment Successful Badge -->
     <div style="border: 1.5px solid #d4af37; border-radius: 4px; background: #fffcf4; padding: 9px 12px; margin-top: 14px; text-align: center; font-size: 12px; color: #1f2937;">
       <span style="display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #b8973d; color: #fff; font-size: 10px; font-weight: bold; margin-right: 6px;">✓</span>
-      <strong>PAYMENT SUCCESSFUL</strong> &nbsp;|&nbsp; Paid via ${inv.mode} &nbsp; Thank you for your payment.
+      <strong>PAYMENT SUCCESSFUL</strong> &nbsp;|&nbsp; Paid via ${inv.splitDetails && inv.splitDetails.length > 0 ? `SPLIT (${inv.splitDetails.map(s => `${s.mode}: ₹${Number(s.amount).toFixed(0)}`).join(' + ')})` : inv.mode} &nbsp; Thank you for your payment.
     </div>
 
     <!-- Footer Columns -->
@@ -440,6 +452,10 @@ function generateWhatsAppReceiptMessage(inv: Invoice) {
     ? `Tax (GST ${fin.gstRate}%): ₹${fin.taxAmt.toFixed(2)}`
     : `Tax (GST): ₹0.00`;
 
+  const payModeFormatted = inv.splitDetails && inv.splitDetails.length > 0
+    ? `SPLIT (${inv.splitDetails.map(s => `${s.mode.toUpperCase()}: ₹${Number(s.amount).toFixed(2)}`).join(' + ')})`
+    : inv.mode.toUpperCase();
+
   return `✨ *NEW DUKE & DUCHESS UNISEX SALON* ✨
 ━━━━━━━━━━━━━━━━━━━━
 *OFFICIAL TAX INVOICE & RECEIPT*
@@ -448,7 +464,7 @@ function generateWhatsAppReceiptMessage(inv: Invoice) {
 📅 *Date & Time:* ${dateTimeStr}
 👤 *Customer:* ${inv.customer || 'Valued Client'}
 📱 *Mobile:* ${inv.phone || 'N/A'}
-💳 *Payment Mode:* ${inv.mode.toUpperCase()} (PAID ✅)
+💳 *Payment Mode:* ${payModeFormatted} (PAID ✅)
 
 ✂️ *SERVICES & PRODUCTS:*
 ${itemsText}
@@ -754,6 +770,38 @@ export default function DukeDuchessBillingApp() {
   const [customGst,     setCustomGst]     = useState<string>('');
   const [taxType,       setTaxType]       = useState<'exclusive' | 'inclusive'>('exclusive');
   const [posPayMode,    setPosPayMode]    = useState('UPI');
+
+  // Split payment state
+  type SplitEntry = {
+    id: string;
+    mode: string;
+    amount: string;
+  };
+
+  const [splitEntries, setSplitEntries] = useState<SplitEntry[]>([
+    { id: '1', mode: 'Cash', amount: '' },
+    { id: '2', mode: 'UPI', amount: '' }
+  ]);
+
+  const updateSplitEntry = (id: string, field: 'mode' | 'amount', value: string) => {
+    setSplitEntries(prev => prev.map(e => e.id === id ? { ...e, [field]: value } : e));
+  };
+
+  const addSplitEntry = () => {
+    if (splitEntries.length >= 5) return;
+    const availableModes = ['Card', 'Net Banking', 'Cheque', 'UPI', 'Cash'];
+    const usedModes = splitEntries.map(e => e.mode);
+    const nextMode = availableModes.find(m => !usedModes.includes(m)) || 'Card';
+    setSplitEntries(prev => [
+      ...prev,
+      { id: Date.now().toString(), mode: nextMode, amount: '' }
+    ]);
+  };
+
+  const removeSplitEntry = (id: string) => {
+    if (splitEntries.length <= 2) return;
+    setSplitEntries(prev => prev.filter(e => e.id !== id));
+  };
   const [posServiceTab, setPosServiceTab] = useState<'men' | 'women' | 'products'>('men');
   const [posSearch,     setPosSearch]     = useState('');
   const [billSuccess,   setBillSuccess]   = useState(false);
@@ -863,6 +911,22 @@ export default function DukeDuchessBillingApp() {
     ? Math.round((afterDiscount - gstAmt) * 100) / 100
     : afterDiscount;
 
+  const totalSplitEntered = splitEntries.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+  const remainingSplitBalance = Math.round((grandTotal - totalSplitEntered) * 100) / 100;
+  const isSplitValid = posPayMode !== 'Split' || (Math.abs(remainingSplitBalance) < 0.01 && totalSplitEntered > 0);
+
+  const autoBalanceRemaining = () => {
+    if (remainingSplitBalance <= 0) return;
+    const emptyEntry = splitEntries.find(e => !e.amount || parseFloat(e.amount) === 0);
+    if (emptyEntry) {
+      updateSplitEntry(emptyEntry.id, 'amount', remainingSplitBalance.toString());
+    } else {
+      const lastEntry = splitEntries[splitEntries.length - 1];
+      const cur = parseFloat(lastEntry.amount) || 0;
+      updateSplitEntry(lastEntry.id, 'amount', (cur + remainingSplitBalance).toString());
+    }
+  };
+
   const handleGenerateBill = () => {
     if (cartItems.length === 0) { alert('⚠️ Cart is empty. Please add services first.'); return; }
     const serviceNames = cartItems.map(c => `${c.name} x${c.qty}`).join(', ');
@@ -903,6 +967,20 @@ export default function DukeDuchessBillingApp() {
     }));
 
     const nextNum = invoices.length + 1;
+
+    if (posPayMode === 'Split') {
+      if (!isSplitValid) {
+        alert(`⚠️ Split Payment Mismatch!\n\nGrand Total: ₹${grandTotal.toFixed(2)}\nSplit Total Entered: ₹${totalSplitEntered.toFixed(2)}\nDifference: ₹${Math.abs(remainingSplitBalance).toFixed(2)} ${remainingSplitBalance > 0 ? 'Remaining' : 'Over'}\n\nPlease balance the split amounts before generating the bill.`);
+        return;
+      }
+    }
+
+    const splitDetails: SplitPayment[] = posPayMode === 'Split'
+      ? splitEntries
+          .filter(e => (parseFloat(e.amount) || 0) > 0)
+          .map(e => ({ mode: e.mode, amount: parseFloat(e.amount) || 0 }))
+      : [];
+
     const newInv: Invoice = {
       id: `INV-${String(nextNum).padStart(4, '0')}`,
       customer: customerName,
@@ -920,7 +998,10 @@ export default function DukeDuchessBillingApp() {
       amount: grandTotal,
       gst: gstRate,
       status: 'PAID',
-      mode: posPayMode
+      mode: posPayMode === 'Split' && splitDetails.length > 0
+        ? `Split (${splitDetails.map(s => `${s.mode}: ₹${s.amount.toFixed(0)}`).join(' + ')})`
+        : posPayMode,
+      splitDetails: splitDetails.length > 0 ? splitDetails : undefined
     };
     setInvoices(prev => [newInv, ...prev]);
     // Save invoice to MongoDB
@@ -945,6 +1026,11 @@ export default function DukeDuchessBillingApp() {
       setIsCustomGst(false);
       setCustomGst('');
       setTaxType('exclusive');
+      setPosPayMode('UPI');
+      setSplitEntries([
+        { id: '1', mode: 'Cash', amount: '' },
+        { id: '2', mode: 'UPI', amount: '' }
+      ]);
       setPhoneLookupStatus('idle'); setPhoneLookupMsg('');
     }, 2500);
   };
@@ -2041,6 +2127,169 @@ export default function DukeDuchessBillingApp() {
                     }}>{mode}</button>
                   ))}
                 </div>
+
+                {/* ── Split Payment Breakdown UI ── */}
+                {posPayMode === 'Split' && (
+                  <div style={{
+                    marginTop: '0.85rem',
+                    padding: '0.85rem',
+                    borderRadius: '10px',
+                    backgroundColor: 'rgba(212,175,55,0.06)',
+                    border: '1px solid rgba(212,175,55,0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.65rem',
+                    animation: 'fadeIn 0.2s ease'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--accent-gold)' }}>
+                        Split Payment Breakdown
+                      </span>
+                      <span style={{
+                        fontSize: '0.72rem',
+                        fontWeight: 700,
+                        padding: '0.2rem 0.55rem',
+                        borderRadius: '6px',
+                        backgroundColor: Math.abs(remainingSplitBalance) < 0.01 && totalSplitEntered > 0 ? 'rgba(16,185,129,0.2)' : 'rgba(245,158,11,0.2)',
+                        color: Math.abs(remainingSplitBalance) < 0.01 && totalSplitEntered > 0 ? '#10b981' : (remainingSplitBalance > 0 ? '#f59e0b' : '#ef4444')
+                      }}>
+                        {Math.abs(remainingSplitBalance) < 0.01 && totalSplitEntered > 0
+                          ? '✓ Balanced'
+                          : remainingSplitBalance > 0
+                          ? `₹${remainingSplitBalance.toFixed(2)} Remaining`
+                          : `₹${Math.abs(remainingSplitBalance).toFixed(2)} Over`}
+                      </span>
+                    </div>
+
+                    {splitEntries.map((entry) => (
+                      <div key={entry.id} style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <select
+                          value={entry.mode}
+                          onChange={(e) => updateSplitEntry(entry.id, 'mode', e.target.value)}
+                          style={{
+                            width: '105px',
+                            padding: '0.42rem 0.5rem',
+                            borderRadius: '6px',
+                            border: '1px solid var(--border-color)',
+                            backgroundColor: 'var(--bg-primary)',
+                            color: 'var(--text-main)',
+                            fontSize: '0.78rem',
+                            fontWeight: 600
+                          }}
+                        >
+                          <option value="Cash">Cash</option>
+                          <option value="UPI">UPI</option>
+                          <option value="Card">Card</option>
+                          <option value="Net Banking">Net Banking</option>
+                          <option value="Cheque">Cheque</option>
+                        </select>
+
+                        <div style={{ position: 'relative', flex: 1 }}>
+                          <span style={{ position: 'absolute', left: '0.55rem', top: '50%', transform: 'translateY(-50%)', fontSize: '0.78rem', color: 'var(--text-muted)' }}>₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="0.00"
+                            value={entry.amount}
+                            onChange={(e) => updateSplitEntry(entry.id, 'amount', e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '0.42rem 0.5rem 0.42rem 1.35rem',
+                              borderRadius: '6px',
+                              border: '1px solid var(--border-color)',
+                              backgroundColor: 'var(--bg-primary)',
+                              color: 'var(--text-main)',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              boxSizing: 'border-box'
+                            }}
+                          />
+                        </div>
+
+                        {remainingSplitBalance > 0 && (!entry.amount || parseFloat(entry.amount) === 0) && (
+                          <button
+                            type="button"
+                            onClick={() => updateSplitEntry(entry.id, 'amount', remainingSplitBalance.toString())}
+                            title="Auto-fill remaining balance into this mode"
+                            style={{
+                              padding: '0.42rem 0.55rem',
+                              borderRadius: '6px',
+                              border: '1px solid rgba(212,175,55,0.4)',
+                              backgroundColor: 'rgba(212,175,55,0.12)',
+                              color: 'var(--accent-gold)',
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap'
+                            }}
+                          >
+                            Fill Bal
+                          </button>
+                        )}
+
+                        {splitEntries.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => removeSplitEntry(entry.id)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--text-muted)',
+                              cursor: 'pointer',
+                              padding: '0.2rem',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.15rem' }}>
+                      {splitEntries.length < 5 && (
+                        <button
+                          type="button"
+                          onClick={addSplitEntry}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--accent-gold)',
+                            fontSize: '0.74rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.25rem',
+                            padding: 0
+                          }}
+                        >
+                          <Plus size={13} /> Add Mode
+                        </button>
+                      )}
+
+                      {remainingSplitBalance > 0 && (
+                        <button
+                          type="button"
+                          onClick={autoBalanceRemaining}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#10b981',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            marginLeft: 'auto'
+                          }}
+                        >
+                          ⚡ Auto-Balance Remaining (₹{remainingSplitBalance.toFixed(2)})
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Generate Bill Button */}
@@ -2048,16 +2297,23 @@ export default function DukeDuchessBillingApp() {
                 onClick={handleGenerateBill}
                 style={{
                   width: '100%', padding: '0.9rem', borderRadius: '12px', border: 'none',
-                  background: cartItems.length ? 'linear-gradient(135deg,#d4af37,#f3cf55)' : 'var(--border-color)',
-                  color: cartItems.length ? '#000' : 'var(--text-muted)',
-                  fontWeight: 800, fontSize: '1rem', cursor: cartItems.length ? 'pointer' : 'not-allowed',
+                  background: cartItems.length && (posPayMode !== 'Split' || isSplitValid)
+                    ? 'linear-gradient(135deg,#d4af37,#f3cf55)'
+                    : 'var(--border-color)',
+                  color: cartItems.length && (posPayMode !== 'Split' || isSplitValid) ? '#000' : 'var(--text-muted)',
+                  fontWeight: 800, fontSize: '1rem',
+                  cursor: cartItems.length ? 'pointer' : 'not-allowed',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-                  boxShadow: cartItems.length ? '0 4px 20px rgba(212,175,55,0.35)' : 'none',
+                  boxShadow: cartItems.length && (posPayMode !== 'Split' || isSplitValid) ? '0 4px 20px rgba(212,175,55,0.35)' : 'none',
                   transition: 'all 0.2s ease', letterSpacing: '0.3px'
                 }}
               >
                 <Receipt size={20} />
-                Generate Bill • ₹{grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                {posPayMode === 'Split' && !isSplitValid && cartItems.length > 0
+                  ? (remainingSplitBalance > 0
+                      ? `Split Mismatch • ₹${remainingSplitBalance.toFixed(0)} Due`
+                      : `Split Mismatch • ₹${Math.abs(remainingSplitBalance).toFixed(0)} Over`)
+                  : `Generate Bill • ₹${grandTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`}
               </button>
             </div>
           </div>
@@ -2262,13 +2518,25 @@ export default function DukeDuchessBillingApp() {
             'Other / Split': { count: 0, amount: 0, color: '#f59e0b' }
           };
           paidInvoices.forEach(i => {
-            const m = (i.mode || 'UPI').toUpperCase();
-            let key = 'Other / Split';
-            if (m.includes('UPI') || m.includes('QR')) key = 'UPI / QR';
-            else if (m.includes('CASH')) key = 'Cash';
-            else if (m.includes('CARD')) key = 'Card';
-            modeMap[key].count += 1;
-            modeMap[key].amount += Number(i.amount) || 0;
+            if (i.splitDetails && i.splitDetails.length > 0) {
+              modeMap['Other / Split'].count += 1;
+              i.splitDetails.forEach(s => {
+                const sm = (s.mode || '').toUpperCase();
+                const amt = Number(s.amount) || 0;
+                if (sm.includes('UPI') || sm.includes('QR')) modeMap['UPI / QR'].amount += amt;
+                else if (sm.includes('CASH')) modeMap['Cash'].amount += amt;
+                else if (sm.includes('CARD')) modeMap['Card'].amount += amt;
+                else modeMap['Other / Split'].amount += amt;
+              });
+            } else {
+              const m = (i.mode || 'UPI').toUpperCase();
+              let key = 'Other / Split';
+              if (m.includes('UPI') || m.includes('QR')) key = 'UPI / QR';
+              else if (m.includes('CASH')) key = 'Cash';
+              else if (m.includes('CARD')) key = 'Card';
+              modeMap[key].count += 1;
+              modeMap[key].amount += Number(i.amount) || 0;
+            }
           });
 
           // Daily Sales Map for Chart
@@ -2906,7 +3174,13 @@ export default function DukeDuchessBillingApp() {
                   <div style={{ fontSize: '12px', color: '#374151', lineHeight: 1.7 }}>
                     <div>Invoice No. &nbsp;&nbsp;&nbsp;&nbsp;: <strong style={{ color: '#111' }}>{inv.id}</strong></div>
                     <div>Date &amp; Time &nbsp;&nbsp;&nbsp;: <strong style={{ color: '#111' }}>{dateTimeStr}</strong></div>
-                    <div>Payment Mode : <strong style={{ color: '#111', textTransform: 'uppercase' }}>{inv.mode}</strong></div>
+                    <div>Payment Mode : <strong style={{ color: '#111', textTransform: 'uppercase' }}>{inv.splitDetails && inv.splitDetails.length > 0 ? 'SPLIT' : inv.mode}</strong>
+                      {inv.splitDetails && inv.splitDetails.length > 0 && (
+                        <div style={{ fontSize: '11px', color: '#4b5563', marginTop: '3px', fontWeight: 600 }}>
+                          {inv.splitDetails.map(s => `${s.mode}: ₹${Number(s.amount).toFixed(2)}`).join('  |  ')}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -2976,7 +3250,7 @@ export default function DukeDuchessBillingApp() {
               {/* Payment Successful Badge */}
               <div style={{ border: '1.5px solid #d4af37', borderRadius: '4px', background: '#fffcf4', padding: '9px 12px', marginTop: '14px', textAlign: 'center', fontSize: '12px', color: '#1f2937' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '16px', height: '16px', borderRadius: '50%', background: '#b8973d', color: '#fff', fontSize: '10px', fontWeight: 'bold', marginRight: '6px' }}>✓</span>
-                <strong>PAYMENT SUCCESSFUL</strong> &nbsp;|&nbsp; Paid via {inv.mode} &nbsp; Thank you for your payment.
+                <strong>PAYMENT SUCCESSFUL</strong> &nbsp;|&nbsp; Paid via {inv.splitDetails && inv.splitDetails.length > 0 ? `SPLIT (${inv.splitDetails.map(s => `${s.mode}: ₹${Number(s.amount).toFixed(0)}`).join(' + ')})` : inv.mode} &nbsp; Thank you for your payment.
               </div>
 
               {/* Footer Columns */}
